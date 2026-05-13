@@ -3,328 +3,340 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sistema de Incidencias</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<title>HelpDesk Incidencias</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<header class="topbar">
-  <div class="logo">INCIDENCIAS<span>/sys</span></div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('monitor', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      Monitor
-    </button>
-    <button class="tab-btn" onclick="switchTab('tecnico', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-      Técnico
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">🎫</div>
+  <button class="sidebar-item active" onclick="switchTab('monitor',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+    <span>Monitor</span>
+  </button>
+  <button class="sidebar-item" onclick="switchTab('nuevo',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    <span>Nuevo</span>
+  </button>
+  <button class="sidebar-item" onclick="switchTab('tecnico',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Técnicos</span>
+  </button>
+  <div class="sidebar-bottom">
+    <button class="sidebar-sync" onclick="loadFromSheet()" title="Sincronizar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
   </div>
-  <div class="sync-status">
-    <div class="dot" id="sync-dot"></div>
-    <span id="sync-label">Sin configurar</span>
+</nav>
+
+<!-- APP -->
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 id="page-title">Tickets del Día</h1>
+      <p><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Sin configurar</span></p>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-date">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="today-label"></span>
+      </div>
+      <div class="stat-pill open"><span id="top-open">0</span> activos</div>
+      <div class="stat-pill closed"><span id="top-closed">0</span> cerrados</div>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ════ PANEL MONITOR ════ -->
+    <section id="panel-monitor" class="panel active">
+
+      <!-- Config -->
+      <div class="config-bar" id="config-section" style="display:none">
+        <h3>⚙ Configuración Google Sheets</h3>
+        <p>Conecta con tu hoja de Drive para sincronizar tickets automáticamente.</p>
+        <div class="config-row">
+          <div class="field"><label>URL Web App</label><input type="text" id="cfg-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+          <div class="field"><label>Hoja</label><input type="text" id="cfg-sheet" value="SLA"></div>
+          <button class="btn btn-primary" style="flex:none;margin-top:18px" onclick="saveConfig()">Guardar</button>
+          <button class="btn" style="margin-top:18px" onclick="testConnection()">Probar</button>
+        </div>
+        <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="toggleConfig()">Ocultar</button></div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics">
+        <div class="metric blue">
+          <div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <div class="metric-body"><div class="metric-val" id="m-hoy">0</div><div class="metric-label">Hoy</div></div>
+        </div>
+        <div class="metric warn">
+          <div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div class="metric-body"><div class="metric-val" id="m-open">0</div><div class="metric-label">En progreso</div></div>
+        </div>
+        <div class="metric green">
+          <div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="metric-body"><div class="metric-val" id="m-closed">0</div><div class="metric-label">Cerrados</div></div>
+        </div>
+        <div class="metric purple">
+          <div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg></div>
+          <div class="metric-body"><div class="metric-val" id="m-total">0</div><div class="metric-label">Total HOY</div></div>
+        </div>
+      </div>
+
+      <!-- Page header con filtros -->
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Tickets del Día</h2>
+          <p id="monitor-subtitle">Hoy: 0 tickets</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn-report" onclick="toggleConfig()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Configurar
+          </button>
+          <div class="tab-group">
+            <button class="tg-btn active" onclick="setMonFilter('all',this)">Todos <span class="tg-count" id="tg-all">0</span></button>
+            <button class="tg-btn" onclick="setMonFilter('Abierto',this)" style="--act:var(--danger)">Activos <span class="tg-count" id="tg-open">0</span></button>
+            <button class="tg-btn" onclick="setMonFilter('Cerrado',this)">Cerrados <span class="tg-count" id="tg-closed">0</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tickets abiertos cards -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="section-head">
+          <div class="section-title">
+            <span style="color:var(--danger)">●</span> Tickets activos
+            <span class="count-chip chip-red" id="open-count">0</span>
+          </div>
+          <div class="section-actions">
+            <div class="day-filters" id="day-filters">
+              <button class="fpill active" onclick="setDayFilter('today',this)">Hoy</button>
+              <button class="fpill" onclick="setDayFilter('yesterday',this)">Ayer</button>
+              <button class="fpill" onclick="setDayFilter('3days',this)">3 días</button>
+              <button class="fpill" onclick="setDayFilter('week',this)">Semana</button>
+              <button class="fpill" onclick="setDayFilter('all',this)">Todos</button>
+            </div>
+          </div>
+        </div>
+        <div class="open-list" id="open-tickets-list">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Sin activos · No hay tickets activos ahora mismo.
+          </div>
+        </div>
+      </div>
+
+      <!-- Historial por dias -->
+      <div class="card">
+        <div class="section-head">
+          <div class="section-title">
+            📅 Historial
+            <span class="count-chip chip-blue" id="all-count">0</span>
+          </div>
+          <div class="section-actions">
+            <input type="date" id="hist-date" onchange="renderMonitorHist()" class="date-input">
+            <div class="search-wrap">
+              <input type="text" id="search-mon" placeholder="Buscar..." oninput="renderMonitorHist()" class="search-inp">
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('hist-date').value='';renderMonitorHist()">Todos</button>
+          </div>
+        </div>
+        <div class="hist-body" id="historial-body"></div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL NUEVO ════ -->
+    <section id="panel-nuevo" class="panel">
+      <div class="page-header">
+        <div class="page-header-left"><h2>Nueva Incidencia</h2><p>Registra una nueva incidencia en el sistema</p></div>
+      </div>
+      <div class="card" style="max-width:680px">
+        <div class="card-header"><h3><div class="card-icon">+</div> Datos de la incidencia</h3></div>
+        <div class="card-body">
+          <div class="row2">
+            <div class="field"><label>Monitor *</label>
+              <select id="f-monitor">
+                <option value="">Seleccionar...</option>
+                <option>Jose Luis</option><option>Boris</option><option>Jimmy</option>
+                <option>Marta</option><option>Jasmin</option><option>Sandor</option>
+                <option>Jose Cruz</option><option>Jonatan</option><option>Linda</option>
+              </select>
+            </div>
+            <div class="field"><label>Código</label><input type="number" id="f-cod" placeholder="10441" min="0" max="99999" oninput="if(this.value.length>5)this.value=this.value.slice(0,5)"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Fecha *</label><input type="date" id="f-fecha" readonly style="background:var(--bg);cursor:default"></div>
+            <div class="field"><label>Bloque</label>
+              <select id="f-bloque">
+                <option value="">—</option>
+                <option>B1</option><option>B2</option><option>B3</option>
+                <option>B4</option><option>B5</option><option>B6</option><option>CONTROL</option>
+              </select>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Tipo incidencia</label>
+              <select id="f-tipo-inc"><option>Incidencia Interna</option><option>Incidencia Externa</option></select>
+            </div>
+            <div class="field"><label>Problema *</label>
+              <select id="f-tipo">
+                <option value="">Seleccionar...</option>
+                <option>Sin conexión a internet</option><option>Corte de fibra</option>
+                <option>Saturación de sesiones</option><option>Intermitencia en la red</option>
+                <option>Sin energía eléctrica</option><option>Problemas de plataforma</option>
+                <option>Error de usuario</option><option>Inconsistencia en el equipo</option>
+                <option>SW OFF</option><option>CFO</option><option>Conexión intermitente</option>
+                <option>Inestabilidad en la red</option><option>Problema de laptop</option>
+                <option>Problema con UPS</option><option>Internet lento</option><option>Otro</option>
+              </select>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Técnico</label>
+              <select id="f-tec">
+                <option value="">Sin asignar</option>
+                <option>Jose Luis</option><option>Kevin</option><option>Luis C</option>
+                <option>Luis Ceron</option><option>Marta De La Cruz</option>
+                <option>Sandor H</option><option>Esau</option><option>Jimy</option><option>Jona</option>
+              </select>
+            </div>
+            <div class="field"><label>Motivo probable</label>
+              <select id="f-motivo">
+                <option value="">—</option>
+                <option>Visita técnica</option><option>Reconfiguración</option>
+                <option>Falla de ISP</option><option>Falla de plataforma</option>
+                <option>Corte de suministro eléctrico</option>
+                <option>Configuración de Equipos Apagados</option>
+                <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
+                <option>Configuración de Chromebook</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label>Descripción</label><textarea id="f-desc" placeholder="Describe la incidencia con detalle..."></textarea></div>
+          <div class="field"><label>N° Ticket externo</label><input type="number" id="f-ticket-ext" placeholder="36472"></div>
+        </div>
+        <div class="alert alert-ok" id="alert-ok"><span id="alert-ok-msg">✓ Guardado en Google Sheets</span></div>
+        <div class="alert alert-err" id="alert-err"><span id="alert-err-msg">Sin conexión. Guardado localmente.</span></div>
+        <div class="card-footer">
+          <button class="btn btn-primary" onclick="crearTicket()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Registrar incidencia
+          </button>
+          <button class="btn btn-ghost" onclick="limpiarForm()">Limpiar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL TÉCNICO ════ -->
+    <section id="panel-tecnico" class="panel">
+      <div class="page-header">
+        <div class="page-header-left"><h2>Panel Técnico</h2><p>Gestión de tickets asignados</p></div>
+      </div>
+      <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+        <div class="metric blue"><div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg></div><div class="metric-body"><div class="metric-val" id="t-total">0</div><div class="metric-label">Total</div></div></div>
+        <div class="metric warn"><div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="metric-body"><div class="metric-val" id="t-pend">0</div><div class="metric-label">Pendientes</div></div></div>
+        <div class="metric green"><div class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div><div class="metric-body"><div class="metric-val" id="t-res">0</div><div class="metric-label">Resueltos hoy</div></div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="section-head" style="flex-wrap:wrap;gap:10px">
+          <div class="section-title"><span style="color:var(--danger)">●</span> Pendientes <span class="count-chip chip-red" id="tec-open-count">0</span></div>
+          <div class="section-actions">
+            <div class="day-filters" id="tec-day-filters">
+              <button class="fpill active" onclick="setTecDayFilter('today',this)">Hoy</button>
+              <button class="fpill" onclick="setTecDayFilter('yesterday',this)">Ayer</button>
+              <button class="fpill" onclick="setTecDayFilter('3days',this)">3 días</button>
+              <button class="fpill" onclick="setTecDayFilter('week',this)">Semana</button>
+              <button class="fpill" onclick="setTecDayFilter('all',this)">Todos</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadFromSheet()">↺ Sync</button>
+          </div>
+        </div>
+        <div class="open-list" id="tec-open-list"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>✓ No hay tickets pendientes</div></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head" style="flex-wrap:wrap;gap:10px">
+          <div class="section-title">📅 Historial <span class="count-chip chip-blue" id="tec-hist-count">0</span></div>
+          <div class="section-actions">
+            <div class="day-filters">
+              <button class="fpill active" onclick="setFilter('all',this)">Todos</button>
+              <button class="fpill" onclick="setFilter('Abierto',this)">Abiertos</button>
+              <button class="fpill" onclick="setFilter('Cerrado',this)">Cerrados</button>
+            </div>
+            <input type="date" id="tec-hist-date" onchange="renderTecnico()" class="date-input">
+            <div class="search-wrap"><input type="text" id="search-tec" placeholder="Buscar..." oninput="renderTecnico()" class="search-inp"></div>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('tec-hist-date').value='';renderTecnico()">Todos</button>
+          </div>
+        </div>
+        <div class="hist-body" id="tec-historial-body"></div>
+      </div>
+    </section>
+
+  </div><!-- /content -->
+</div><!-- /app -->
+
+<!-- DRAWER -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h2>Detalle del ticket</h2>
+    <button class="btn btn-ghost btn-sm" onclick="closeDrawer()">✕ Cerrar</button>
   </div>
-</header>
-
-<main class="main">
-
-  <!-- ══ PANEL MONITOR ══ -->
-  <section id="panel-monitor" class="panel active">
-
-    <div class="config-banner" id="config-section">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-      <div style="flex:1">
-        <h3>Configuración — Google Sheets</h3>
-        <p>Pega la URL de tu Google Apps Script Web App para sincronizar tickets con Drive.<br>
-        Instrucciones en <code>google-apps-script.gs</code> y <code>INSTRUCCIONES.md</code>.</p>
-        <div class="config-fields">
-          <div class="field">
-            <label>URL Web App (Apps Script)</label>
-            <input type="text" id="cfg-url" placeholder="https://script.google.com/macros/s/AKfy.../exec">
-          </div>
-          <div class="field">
-            <label>Nombre de la hoja</label>
-            <input type="text" id="cfg-sheet" placeholder="Incidencias" value="Incidencias">
-          </div>
-        </div>
-        <div class="btn-actions" style="margin-top:12px">
-          <button class="btn btn-primary btn-sm" onclick="saveConfig()">Guardar configuración</button>
-          <button class="btn btn-sm" onclick="testConnection()">Probar conexión</button>
-          <button class="btn btn-sm" onclick="toggleConfig()">Ocultar</button>
-        </div>
+  <div class="drawer-body">
+    <div class="info-sec">
+      <h3>Información general</h3>
+      <div class="info-grid">
+        <div class="info-item"><label>Monitor</label><span id="d-monitor"></span></div>
+        <div class="info-item"><label>Fecha / Hora</label><span id="d-fecha"></span></div>
+        <div class="info-item"><label>Bloque</label><span id="d-bloque"></span></div>
+        <div class="info-item"><label>COD</label><span id="d-cod"></span></div>
+        <div class="info-item"><label>Tipo</label><span id="d-tipo-inc"></span></div>
+        <div class="info-item"><label>Estado</label><span id="d-estado"></span></div>
       </div>
     </div>
-
-    <div class="metrics" id="metrics-monitor">
-      <div class="metric"><div class="metric-label">Hoy</div><div class="metric-val blue" id="m-hoy">0</div></div>
-      <div class="metric"><div class="metric-label">Total</div><div class="metric-val" id="m-total">0</div></div>
-      <div class="metric"><div class="metric-label">Abiertos</div><div class="metric-val red" id="m-open">0</div></div>
-      <div class="metric"><div class="metric-label">Cerrados</div><div class="metric-val green" id="m-closed">0</div></div>
+    <div class="problem-box">
+      <div class="type" id="d-tipo"></div>
+      <div class="desc" id="d-desc"></div>
     </div>
-
-    <div class="form-card">
-      <h2>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nueva incidencia
-      </h2>
-
-      <div class="form-grid fg2">
-        <div class="field">
-          <label>Monitor *</label>
-          <select id="f-monitor">
-            <option value="">Seleccionar...</option>
-            <option>Jose Luis</option><option>Boris</option><option>Jimmy</option>
-            <option>Marta</option><option>Jasmin</option><option>Sandor</option>
-            <option>Jose Cruz</option><option>Jonatan</option><option>Linda</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>COD / ID usuario</label>
-          <input type="number" id="f-cod" placeholder="Ej. 10441">
-        </div>
+    <div id="resolve-section" class="resolve-box">
+      <h3>✓ Resolver ticket</h3>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#1d4ed8;display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">🕐</span>
+        <span>Hora de cierre: <strong id="hora-cierre-preview">--:-- --</strong> (se registra automáticamente)</span>
       </div>
-
-      <div class="form-grid fg4">
-        <div class="field">
-          <label>Fecha *</label>
-          <input type="date" id="f-fecha">
-        </div>
-        <div class="field">
-          <label>Hora inicio *</label>
-          <input type="time" id="f-hora">
-        </div>
-        <div class="field">
-          <label>Bloque</label>
-          <select id="f-bloque">
-            <option value="">— Ninguno —</option>
-            <option>B1</option><option>B2</option><option>B3</option>
-            <option>B4</option><option>B5</option><option>B6</option><option>CONTROL</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Tipo</label>
-          <select id="f-tipo-inc">
-            <option>Incidencia Interna</option>
-            <option>Incidencia Externa</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-grid fg2">
-        <div class="field">
-          <label>Problema *</label>
-          <select id="f-tipo">
-            <option value="">Seleccionar...</option>
-            <option>Sin conexión a internet</option>
-            <option>Corte de fibra</option>
-            <option>Saturación de sesiones</option>
-            <option>Intermitencia en la red</option>
-            <option>Sin energía eléctrica</option>
-            <option>Problemas de plataforma</option>
-            <option>Error de usuario</option>
-            <option>Inconsistencia en el equipo</option>
-            <option>SW OFF</option>
-            <option>CFO</option>
-            <option>Conexión intermitente</option>
-            <option>Inestabilidad en la red</option>
-            <option>Problema de laptop</option>
-            <option>Problema con UPS</option>
-            <option>Internet lento</option>
-            <option>Otro</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Técnico asignado</label>
-          <select id="f-tec">
-            <option value="">Seleccionar...</option>
-            <option>Jose Luis</option><option>Kevin</option><option>Luis C</option>
-            <option>Luis Ceron</option><option>Marta De La Cruz</option>
-            <option>Sandor H</option><option>Esau</option><option>Jimy</option><option>Jona</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-grid">
-        <div class="field full">
-          <label>Descripción</label>
-          <textarea id="f-desc" placeholder="Describe la incidencia con detalle..."></textarea>
-        </div>
-      </div>
-
-      <div class="form-grid fg2">
-        <div class="field">
-          <label>Motivo probable</label>
-          <select id="f-motivo">
-            <option value="">Seleccionar...</option>
-            <option>Visita técnica</option>
-            <option>Reconfiguración</option>
-            <option>Falla de ISP</option>
-            <option>Falla de plataforma</option>
+      <div class="row2" style="gap:10px;margin-bottom:12px">
+        <div style="display:none"><input type="hidden" id="r-hora-h"><input type="hidden" id="r-hora-m"><input type="hidden" id="r-hora-ampm"></div>
+        <div class="field"><label>Motivo solución</label>
+          <select id="r-motivo">
+            <option>Visita técnica</option><option>Reconfiguración</option>
+            <option>Falla de ISP</option><option>Falla de plataforma</option>
             <option>Corte de suministro eléctrico</option>
             <option>Configuración de Equipos Apagados</option>
-            <option>Problema de usuario</option>
-            <option>Límite de sesiones alcanzado</option>
+            <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
             <option>Configuración de Chromebook</option>
           </select>
         </div>
-        <div class="field">
-          <label>N° Ticket externo (si aplica)</label>
-          <input type="number" id="f-ticket-ext" placeholder="Ej. 36472">
-        </div>
       </div>
-
-      <div class="btn-actions">
-        <button class="btn btn-primary" onclick="crearTicket()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Registrar incidencia
-        </button>
-        <button class="btn" onclick="limpiarForm()">Limpiar</button>
-        <button class="btn btn-sm" onclick="toggleConfig()" style="margin-left:auto">Config</button>
-      </div>
-
-      <div class="alert alert-ok" id="alert-ok">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span id="alert-ok-msg">Incidencia registrada y guardada en Google Sheets.</span>
-      </div>
-      <div class="alert alert-err" id="alert-err">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span id="alert-err-msg">Error al conectar. Ticket guardado localmente.</span>
-      </div>
+      <div class="field" style="margin-bottom:14px"><label>Notas</label><textarea id="r-notas" placeholder="Detalla la solución..."></textarea></div>
+      <button class="btn btn-success" style="width:100%;justify-content:center" onclick="cerrarTicket()">✓ Marcar como cerrado</button>
+      <div class="d-alert ok" id="d-alert-ok">✓ Ticket cerrado y actualizado en Sheets.</div>
+      <div class="d-alert err" id="d-alert-err">Error al actualizar. Guardado localmente.</div>
     </div>
-
-    <div class="table-card">
-      <div class="table-toolbar">
-        <h2>Incidencias registradas</h2>
-        <div class="toolbar-right">
-          <button class="btn btn-sm" onclick="loadFromSheet()">↺ Sincronizar</button>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#Ticket</th><th>Fecha</th><th>Hora</th><th>Monitor</th>
-              <th>Bloque</th><th>Tipo</th><th>Problema</th><th>Técnico</th><th>Estado</th>
-            </tr>
-          </thead>
-          <tbody id="tbl-monitor"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ PANEL TÉCNICO ══ -->
-  <section id="panel-tecnico" class="panel">
-
-    <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
-      <div class="metric"><div class="metric-label">Total</div><div class="metric-val blue" id="t-total">0</div></div>
-      <div class="metric"><div class="metric-label">Pendientes</div><div class="metric-val red" id="t-pend">0</div></div>
-      <div class="metric"><div class="metric-label">Resueltos hoy</div><div class="metric-val green" id="t-res">0</div></div>
-    </div>
-
-    <div class="table-card">
-      <div class="table-toolbar">
-        <h2>Tickets asignados</h2>
-        <div class="toolbar-right">
-          <div class="filters" id="tec-filters">
-            <button class="filter-pill active" onclick="setFilter('all',this)">Todos</button>
-            <button class="filter-pill" onclick="setFilter('Abierto',this)">Abiertos</button>
-            <button class="filter-pill" onclick="setFilter('Cerrado',this)">Cerrados</button>
-          </div>
-          <div class="search-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="search-tec" placeholder="Buscar..." oninput="renderTecnico()">
-          </div>
-          <button class="btn btn-sm" onclick="loadFromSheet()">↺ Sync</button>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#Ticket</th><th>Fecha</th><th>Hora</th><th>Monitor</th>
-              <th>Bloque</th><th>Problema</th><th>Técnico</th><th>Estado</th><th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="tbl-tecnico"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-</main>
-
-<!-- ══ DRAWER DETALLE ══ -->
-<div class="drawer-overlay" id="overlay" onclick="closeDrawer()"></div>
-<div class="drawer" id="drawer">
-  <div class="drawer-header">
-    <h2>Ticket <span class="ticket-id" id="d-id"></span></h2>
-    <button class="btn btn-sm" onclick="closeDrawer()">✕ Cerrar</button>
+    <div class="closed-box" id="closed-msg">✓ Este ticket ya está cerrado.</div>
+    <div id="readonly-notice" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:14px;color:#1d4ed8;font-size:13px;font-weight:600;margin-top:14px;text-align:center">🔒 Solo los técnicos pueden cerrar tickets.</div>
   </div>
-
-  <div class="drawer-section">
-    <h3>Información general</h3>
-    <div class="info-grid">
-      <div class="info-item"><label>Monitor</label><span id="d-monitor"></span></div>
-      <div class="info-item"><label>Fecha / Hora</label><span id="d-fecha"></span></div>
-      <div class="info-item"><label>Bloque</label><span id="d-bloque"></span></div>
-      <div class="info-item"><label>COD</label><span id="d-cod"></span></div>
-      <div class="info-item"><label>Tipo</label><span id="d-tipo-inc"></span></div>
-      <div class="info-item"><label>Estado</label><span id="d-estado"></span></div>
-    </div>
-  </div>
-
-  <div class="drawer-section">
-    <h3>Problema</h3>
-    <div style="margin-bottom:8px;font-weight:500" id="d-tipo"></div>
-    <div style="color:var(--muted);font-size:13px;line-height:1.6" id="d-desc"></div>
-  </div>
-
-  <div id="resolve-section" class="resolve-form">
-    <h3>Resolver ticket</h3>
-    <div class="form-grid fg2">
-      <div class="field">
-        <label>Hora final</label>
-        <input type="time" id="r-hora">
-      </div>
-      <div class="field">
-        <label>Motivo de solución</label>
-        <select id="r-motivo">
-          <option>Visita técnica</option>
-          <option>Reconfiguración</option>
-          <option>Falla de ISP</option>
-          <option>Falla de plataforma</option>
-          <option>Corte de suministro eléctrico</option>
-          <option>Configuración de Equipos Apagados</option>
-          <option>Problema de usuario</option>
-          <option>Límite de sesiones alcanzado</option>
-          <option>Configuración de Chromebook</option>
-        </select>
-      </div>
-    </div>
-    <div class="field" style="margin-top:12px">
-      <label>Notas / Observaciones</label>
-      <textarea id="r-notas" placeholder="Detalla la solución aplicada..."></textarea>
-    </div>
-    <div class="btn-actions">
-      <button class="btn btn-success" onclick="cerrarTicket()">✓ Marcar como cerrado</button>
-    </div>
-    <div class="alert alert-ok" id="d-alert-ok" style="margin-top:12px">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      Ticket cerrado y actualizado en Sheets.
-    </div>
-    <div class="alert alert-err" id="d-alert-err" style="margin-top:12px">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Error al actualizar. Cambio guardado localmente.
-    </div>
-  </div>
-  <div id="closed-msg" class="closed-notice">✓ Este ticket ya está cerrado.</div>
 </div>
 
 <script src="js/config.js"></script>
-<script src="js/sheets.js"></script>
 <script src="js/tickets.js"></script>
+<script src="js/sheets.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 </body>
