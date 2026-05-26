@@ -63,7 +63,10 @@ function renderOpenCards(){
       '</div>'+
       '<div class="tc-action">'+
         '<div class="status-dot open"></div>'+
-        '<button class="btn-view" onclick="event.stopPropagation();openDrawerReadOnly('+idx+')" style="font-size:12px;padding:5px 12px">Ver</button>'+
+        '<div style="display:flex;flex-direction:column;gap:4px">'+
+          '<button class="btn-view" onclick="event.stopPropagation();openDrawerReadOnly('+idx+')" style="font-size:12px;padding:5px 12px">Ver</button>'+
+          '<button onclick="event.stopPropagation();openEdit('+idx+')" style="padding:5px 10px;border-radius:7px;background:#2563eb;color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer">✏️ Editar</button>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -97,7 +100,9 @@ function buildDayGroups(list, readOnly){
         '<td>'+t.bloque+'</td><td>'+t.tipo+'</td>'+
         '<td style="color:var(--text2)">'+t.tecnico+'</td>'+
         '<td><span class="badge '+(t.estado==='Abierto'?'badge-open':'badge-closed')+'">'+t.estado+'</span></td>'+
-        '<td><button class="btn-view" onclick="event.stopPropagation();'+(readOnly?'openDrawerReadOnly':'openDrawer')+'('+idx+')" style="font-size:11px;padding:4px 10px">Ver</button></td>'+
+        '<td style="display:flex;gap:4px">'+
+        '<button onclick="event.stopPropagation();openEdit('+idx+')" style="padding:4px 10px;border-radius:6px;background:#2563eb;color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer">✏️</button>'+
+        '<button class="btn-view" onclick="event.stopPropagation();'+(readOnly?'openDrawerReadOnly':'openDrawer')+'('+idx+')" style="font-size:11px;padding:4px 10px">Ver</button></td>'+
       '</tr>';
     }).join('');
     return '<div class="day-group">'+
@@ -219,3 +224,101 @@ function showAlert(showId,hideId,msg){
 // ── INIT ──
 
 // app.js — Inicialización
+var editIdx = null;
+
+function openEdit(idx) {
+  editIdx = idx;
+  var t = tickets[idx];
+  document.getElementById('e-monitor').value  = t.monitor  || '';
+  document.getElementById('e-cod').value      = t.cod !== '—' ? t.cod : '';
+  document.getElementById('e-bloque').value   = t.bloque   || '';
+  document.getElementById('e-tipo-inc').value = t.tipoInc  || 'Incidencia Interna';
+  document.getElementById('e-tipo').value     = t.tipo     || '';
+  document.getElementById('e-tec').value      = t.tecnico  || '';
+  document.getElementById('e-motivo').value   = t.motivo !== '—' ? t.motivo : '';
+  document.getElementById('e-desc').value     = t.desc !== '—' ? t.desc : '';
+  document.getElementById('e-estado').value   = t.estado   || 'Abierto';
+  document.getElementById('edit-overlay').style.display = 'block';
+  document.getElementById('edit-modal').style.display   = 'block';
+}
+
+function closeEdit() {
+  document.getElementById('edit-overlay').style.display = 'none';
+  document.getElementById('edit-modal').style.display   = 'none';
+  editIdx = null;
+}
+
+function guardarEdit() {
+  if (editIdx === null) return;
+  var t = tickets[editIdx];
+  var codVal = document.getElementById('e-cod').value;
+  // Validar 5 digitos
+  if (!codVal || codVal.length !== 5 || isNaN(codVal)) {
+    alert('El código debe tener exactamente 5 dígitos numéricos.');
+    document.getElementById('e-cod').focus();
+    return;
+  }
+  t.monitor  = document.getElementById('e-monitor').value;
+  t.cod      = codVal || '—';
+  t.bloque   = document.getElementById('e-bloque').value   || '—';
+  t.tipoInc  = document.getElementById('e-tipo-inc').value;
+  t.tipo     = document.getElementById('e-tipo').value;
+  t.tecnico  = document.getElementById('e-tec').value      || 'Sin asignar';
+  t.motivo   = document.getElementById('e-motivo').value   || '—';
+  t.desc     = document.getElementById('e-desc').value     || '—';
+  t.estado   = document.getElementById('e-estado').value;
+  saveLocal();
+  renderAll();
+  closeEdit();
+  // Sync with sheet in background
+  if (typeof updateRowInSheet === 'function') {
+    updateRowInSheet(t).then(function(ok) {
+      if (!ok) console.warn('No se pudo sincronizar edición con Sheets.');
+    });
+  }
+  showAlert('alert-ok', 'alert-err', 'Ticket actualizado ✓');
+}
+
+function validarCod(input) {
+  var v = input.value.trim();
+  if (v && v.length !== 5) {
+    input.style.borderColor = '#dc2626';
+    input.style.boxShadow = '0 0 0 3px rgba(220,38,38,.15)';
+    input.title = 'Debe tener exactamente 5 dígitos';
+  } else {
+    input.style.borderColor = '';
+    input.style.boxShadow = '';
+    input.title = '';
+  }
+}
+// ── AUTO BLOQUE ──
+function autoBloque(cod) {
+  if (cod.length !== 5) return;
+  var bloque = getBloqueFromCod(cod);
+  var el = document.getElementById('f-bloque');
+  if (el && bloque) {
+    el.value = bloque;
+    // feedback visual breve
+    el.style.borderColor = '#16a34a';
+    el.style.background = '#f0fdf4';
+    setTimeout(function() {
+      el.style.borderColor = '';
+      el.style.background = '';
+    }, 1500);
+  }
+}
+
+function autoBloqueEdit(cod) {
+  if (cod.length !== 5) return;
+  var bloque = getBloqueFromCod(cod);
+  var el = document.getElementById('e-bloque');
+  if (el && bloque) {
+    el.value = bloque;
+    el.style.borderColor = '#16a34a';
+    el.style.background = '#f0fdf4';
+    setTimeout(function() {
+      el.style.borderColor = '';
+      el.style.background = '';
+    }, 1500);
+  }
+}

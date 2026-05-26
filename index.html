@@ -168,7 +168,7 @@
                 <option>Jose Cruz</option><option>Jonatan</option><option>Linda</option>
               </select>
             </div>
-            <div class="field"><label>Código</label><input type="number" id="f-cod" placeholder="10441" min="0" max="99999" oninput="if(this.value.length>5)this.value=this.value.slice(0,5)"></div>
+            <div class="field"><label>Código</label><input type="text" id="f-cod" placeholder="10441" oninput="autoBloque(this.value)" maxlength="5" maxlength="5" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,5)" onblur="validarCod(this)"></div>
           </div>
           <div class="row2">
             <div class="field"><label>Fecha *</label><input type="date" id="f-fecha" readonly style="background:var(--bg);cursor:default"></div>
@@ -187,13 +187,25 @@
             <div class="field"><label>Problema *</label>
               <select id="f-tipo">
                 <option value="">Seleccionar...</option>
-                <option>Sin conexión a internet</option><option>Corte de fibra</option>
-                <option>Saturación de sesiones</option><option>Intermitencia en la red</option>
-                <option>Sin energía eléctrica</option><option>Problemas de plataforma</option>
-                <option>Error de usuario</option><option>Inconsistencia en el equipo</option>
-                <option>SW OFF</option><option>CFO</option><option>Conexión intermitente</option>
-                <option>Inestabilidad en la red</option><option>Problema de laptop</option>
-                <option>Problema con UPS</option><option>Internet lento</option><option>Otro</option>
+                <option>Error de usuario</option>
+                <option>Inconsistencia en el equipo</option>
+                <option>Intermitencia en la red</option>
+                <option>problemas con el sitio Kira</option>
+                <option>Problemas de plataforma</option>
+                <option>Saturación de sesiones</option>
+                <option>Sin energia electrica</option>
+                <option>bloque de URL en la red</option>
+                <option>Gabinete apagado</option>
+                <option>Visita tec</option>
+                <option>Equipo desconfigurado</option>
+                <option>AP OFF</option>
+                <option>conf PILOTO</option>
+                <option>RT Apagado</option>
+                <option>sin conexion</option>
+                <option>Pro. Ancho de banda</option>
+                <option>FW Apagado</option>
+                <option>SW OFF</option>
+                <option>Otro</option>
               </select>
             </div>
           </div>
@@ -339,5 +351,107 @@
 <script src="js/sheets.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
+
+<!-- EDIT MODAL -->
+<div id="edit-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;backdrop-filter:blur(2px)" onclick="closeEdit()"></div>
+<div id="edit-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.15);z-index:301">
+  <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1">
+    <h2 style="font-size:16px;font-weight:700;font-family:Inter,sans-serif">✏️ Editar ticket</h2>
+    <button onclick="closeEdit()" style="background:none;border:none;cursor:pointer;font-size:20px;color:#6b7280;line-height:1">×</button>
+  </div>
+  <div style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;font-family:Inter,sans-serif">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Monitor</label>
+        <select id="e-monitor" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+          <option>Jose Luis</option><option>Boris</option><option>Jimmy</option>
+          <option>Marta</option><option>Jasmin</option><option>Sandor</option>
+          <option>Jose Cruz</option><option>Jonatan</option><option>Linda</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Código (exactamente 5 dígitos)</label>
+        <input type="text" id="e-cod" placeholder="10441" oninput="autoBloqueEdit(this.value)" min="0" max="99999" maxlength="5" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,5)" onblur="validarCod(this)" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Bloque</label>
+        <select id="e-bloque" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+          <option value="">—</option>
+          <option>B1</option><option>B2</option><option>B3</option>
+          <option>B4</option><option>B5</option><option>B6</option><option>CONTROL</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Tipo incidencia</label>
+        <select id="e-tipo-inc" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+          <option>Incidencia Interna</option><option>Incidencia Externa</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Problema</label>
+      <select id="e-tipo" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+        <option>Error de usuario</option>
+        <option>Inconsistencia en el equipo</option>
+        <option>Intermitencia en la red</option>
+        <option>problemas con el sitio Kira</option>
+        <option>Problemas de plataforma</option>
+        <option>Saturación de sesiones</option>
+        <option>Sin energia electrica</option>
+        <option>bloque de URL en la red</option>
+        <option>Gabinete apagado</option>
+        <option>Visita tec</option>
+        <option>Equipo desconfigurado</option>
+        <option>AP OFF</option>
+        <option>conf PILOTO</option>
+        <option>RT Apagado</option>
+        <option>sin conexion</option>
+        <option>Pro. Ancho de banda</option>
+        <option>FW Apagado</option>
+        <option>SW OFF</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Técnico</label>
+        <select id="e-tec" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+          <option value="">Sin asignar</option>
+          <option>Jose Luis</option><option>Kevin</option><option>Luis C</option>
+          <option>Luis Ceron</option><option>Marta De La Cruz</option>
+          <option>Sandor H</option><option>Esau</option><option>Jimy</option><option>Jona</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Motivo</label>
+        <select id="e-motivo" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+          <option value="">—</option>
+          <option>Visita técnica</option><option>Reconfiguración</option>
+          <option>Falla de ISP</option><option>Falla de plataforma</option>
+          <option>Corte de suministro eléctrico</option>
+          <option>Configuración de Equipos Apagados</option>
+          <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
+          <option>Configuración de Chromebook</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Descripción</label>
+      <textarea id="e-desc" rows="3" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Estado</label>
+      <select id="e-estado" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
+        <option>Abierto</option><option>Cerrado</option>
+      </select>
+    </div>
+  </div>
+  <div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:10px;position:sticky;bottom:0;background:#fff">
+    <button onclick="guardarEdit()" style="flex:1;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif">💾 Guardar cambios</button>
+    <button onclick="closeEdit()" style="padding:10px 20px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;font-family:Inter,sans-serif">Cancelar</button>
+  </div>
+</div>
 </body>
 </html>
