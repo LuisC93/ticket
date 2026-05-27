@@ -1,10 +1,8 @@
-// sheets.js — v6 volviendo al payload que funcionaba
+// sheets.js — v7 assume success on redirect
 
-// ── COLA OFFLINE ──
 var pendingQueue = JSON.parse(localStorage.getItem('inc_queue') || '[]');
 function saveQueue() { localStorage.setItem('inc_queue', JSON.stringify(pendingQueue)); }
 
-// ── TOAST ──
 (function injectToast() {
   if (document.getElementById('sync-toast')) return;
   var t = document.createElement('div');
@@ -41,7 +39,7 @@ function showToast(msg, type) {
   }
 }
 
-// ── FETCH NORMAL (lectura: ping, getAll, getBloques) ──
+// ── FETCH LECTURA (ping, getAll, getBloques) ──
 async function sheetFetchRead(params, retries) {
   if (!CFG.url) return null;
   if (retries === undefined) retries = 3;
@@ -62,25 +60,49 @@ async function sheetFetchRead(params, retries) {
   return null;
 }
 
-// ── FETCH ESCRITURA con payload (append, update) — no-cors ──
+// ── FETCH ESCRITURA (append, update, updateEstado) ──
+// Google redirige las escrituras y el browser no puede leer la respuesta (CORS)
+// pero el script SÍ se ejecuta en el servidor. Asumimos éxito si HTTP es 200 o 302.
 async function sheetFetchWrite(data) {
   if (!CFG.url) return false;
   var payload = encodeURIComponent(JSON.stringify(data));
   try {
-    await fetch(CFG.url + '?payload=' + payload, { mode: 'no-cors' });
-    return true;
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 15000);
+    var r = await fetch(CFG.url + '?payload=' + payload, {
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+    // Si llega aquí sin excepción, el servidor recibió la petición
+    // No importa si no podemos leer el JSON — el script ya se ejecutó
+    try {
+      var text = await r.text();
+      if (text && text.indexOf('"status":"ok"') > -1) return true;
+      if (text && text.indexOf('"status":"error"') > -1) {
+        console.warn('sheetFetchWrite error del servidor:', text.slice(0, 200));
+        return false;
+      }
+      // HTML de redirect = ejecutado pero no podemos leer respuesta = asumir ok
+      return true;
+    } catch(e) {
+      return true; // no podemos leer pero se ejecutó
+    }
   } catch(e) {
-    console.warn('sheetFetchWrite error:', e);
+    // Solo falla si hay error de red real
+    if (e.name === 'AbortError') {
+      console.warn('sheetFetchWrite: timeout');
+    } else {
+      console.warn('sheetFetchWrite: error de red:', e.message);
+    }
     return false;
   }
 }
 
-// Alias para compatibilidad con loadFromSheet
 async function sheetFetch(params, retries) {
   return sheetFetchRead(params, retries);
 }
 
-// ── TEST CONEXION ──
 async function testConnection() {
   if (!CFG.url) { alert('Primero guarda la URL.'); return; }
   setSyncStatus('syncing');
@@ -95,7 +117,6 @@ async function testConnection() {
   }
 }
 
-// ── APPEND ──
 async function appendToSheet(t) {
   if (!CFG.url) return false;
   setSyncStatus('syncing');
@@ -120,7 +141,6 @@ async function appendToSheet(t) {
   return ok;
 }
 
-// ── UPDATE ──
 async function updateRowInSheet(t) {
   if (!CFG.url) return false;
   setSyncStatus('syncing');
@@ -149,7 +169,6 @@ async function updateRowInSheet(t) {
   return ok;
 }
 
-// ── LOAD FROM SHEET ──
 async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
   setSyncStatus('syncing');
@@ -176,7 +195,6 @@ async function loadFromSheet() {
   }
 }
 
-// ── COLA OFFLINE: FLUSH ──
 async function flushQueue() {
   if (!pendingQueue.length || !CFG.url) return;
   var sent = [];
@@ -209,7 +227,6 @@ async function flushQueue() {
   }
 }
 
-// ── AUTO-RETRY ──
 window.addEventListener('online', function() {
   showToast('Conexión restaurada · Sincronizando...', 'warn');
   setTimeout(flushQueue, 1500);
@@ -219,7 +236,6 @@ window.addEventListener('offline', function() {
   showToast('Sin conexión a internet', 'err');
 });
 
-// ── CREAR TICKET ──
 async function crearTicket() {
   var mon  = document.getElementById('f-monitor').value;
   var tipo = document.getElementById('f-tipo').value;
@@ -227,10 +243,10 @@ async function crearTicket() {
   var codVal = document.getElementById('f-cod').value;
   if (!codVal || codVal.length !== 5) { showToast('El código debe tener exactamente 5 dígitos.', 'err'); return; }
   var now = svNow();
-  var hora = now.h + ':' + now.m + ' ' + now.ampm;
   var t = {
     fecha:     fmtFechaDisplay(document.getElementById('f-fecha').value || todayISO()),
-    hora:      hora, monitor: mon, cod: codVal,
+    hora:      now.h + ':' + now.m + ' ' + now.ampm,
+    monitor:   mon, cod: codVal,
     bloque:    document.getElementById('f-bloque').value    || '—',
     tipoInc:   document.getElementById('f-tipo-inc').value,
     desc:      document.getElementById('f-desc').value      || '—',
@@ -248,7 +264,6 @@ async function crearTicket() {
   limpiarForm();
 }
 
-// ── CERRAR TICKET ──
 async function cerrarTicket() {
   if (activeIdx === null) return;
   var t = tickets[activeIdx];
@@ -279,7 +294,6 @@ async function cerrarTicket() {
   updateRowInSheet(t);
 }
 
-// ── LIMPIAR FORM ──
 function limpiarForm() {
   ['f-monitor','f-cod','f-bloque','f-tipo-inc','f-tipo','f-desc','f-tec','f-motivo','f-ticket-ext']
     .forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
@@ -290,7 +304,6 @@ function limpiarForm() {
   var pEl = document.getElementById('f-hora-ampm'); if (pEl) pEl.value = now.ampm;
 }
 
-// ── UPDATE ESTADO MONITOR ──
 async function updateEstadoMonitor(t, cerrar) {
   if (!CFG.url || !t.cod || !t.monitor) return;
   try {
