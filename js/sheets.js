@@ -1,4 +1,4 @@
-// sheets.js — v5 no-cors fire-and-forget
+// sheets.js — v6 volviendo al payload que funcionaba
 
 // ── COLA OFFLINE ──
 var pendingQueue = JSON.parse(localStorage.getItem('inc_queue') || '[]');
@@ -41,14 +41,12 @@ function showToast(msg, type) {
   }
 }
 
-// ── FETCH CON LECTURA (para getAll/ping/getBloques) ──
+// ── FETCH NORMAL (lectura: ping, getAll, getBloques) ──
 async function sheetFetchRead(params, retries) {
   if (!CFG.url) return null;
   if (retries === undefined) retries = 3;
   var q = Object.keys(params).map(function(k) {
-    return encodeURIComponent(k) + '=' + encodeURIComponent(
-      typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
-    );
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
   for (var i = 0; i < retries; i++) {
     try {
@@ -56,8 +54,7 @@ async function sheetFetchRead(params, retries) {
       var timeout = setTimeout(function() { controller.abort(); }, 15000);
       var r = await fetch(CFG.url + '?' + q, { signal: controller.signal });
       clearTimeout(timeout);
-      var text = await r.text();
-      try { return JSON.parse(text); } catch(e) { return null; }
+      return await r.json();
     } catch(e) {
       if (i < retries - 1) await new Promise(function(res) { setTimeout(res, 1000 * (i+1)); });
     }
@@ -65,25 +62,20 @@ async function sheetFetchRead(params, retries) {
   return null;
 }
 
-// ── FETCH SIN CORS (para append/update/updateEstado) ──
-// Usa no-cors: no podemos leer la respuesta pero SÍ se ejecuta en el servidor
-async function sheetFetchWrite(params) {
+// ── FETCH ESCRITURA con payload (append, update) — no-cors ──
+async function sheetFetchWrite(data) {
   if (!CFG.url) return false;
-  var q = Object.keys(params).map(function(k) {
-    return encodeURIComponent(k) + '=' + encodeURIComponent(
-      typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
-    );
-  }).join('&');
+  var payload = encodeURIComponent(JSON.stringify(data));
   try {
-    await fetch(CFG.url + '?' + q, { mode: 'no-cors' });
-    return true; // no-cors siempre "ok" si no hay error de red
+    await fetch(CFG.url + '?payload=' + payload, { mode: 'no-cors' });
+    return true;
   } catch(e) {
     console.warn('sheetFetchWrite error:', e);
     return false;
   }
 }
 
-// Alias para compatibilidad
+// Alias para compatibilidad con loadFromSheet
 async function sheetFetch(params, retries) {
   return sheetFetchRead(params, retries);
 }
@@ -113,11 +105,7 @@ async function appendToSheet(t) {
     t.tipoInc, t.desc, t.tipo, t.motivo, t.tecnico,
     t.horaFinal, t.duracion, t.ticketExt, t.estado
   ];
-  var ok = await sheetFetchWrite({
-    action: 'append',
-    sheet:  CFG.sheet || 'SLA',
-    row:    JSON.stringify(row)
-  });
+  var ok = await sheetFetchWrite({ action: 'append', sheet: CFG.sheet || 'SLA', row: row });
   if (ok) {
     setSyncStatus('ok');
     showToast('Guardado en Google Sheets ✓', 'ok');
@@ -202,14 +190,14 @@ async function flushQueue() {
         item.ticket.tipo, item.ticket.motivo, item.ticket.tecnico,
         item.ticket.horaFinal, item.ticket.duracion, item.ticket.ticketExt, item.ticket.estado
       ];
-      ok = await sheetFetchWrite({ action: 'append', sheet: CFG.sheet || 'SLA', row: JSON.stringify(row) });
+      ok = await sheetFetchWrite({ action: 'append', sheet: CFG.sheet || 'SLA', row: row });
     } else if (item.type === 'update') {
       var t = item.ticket;
       ok = await sheetFetchWrite({
         action: 'update', sheet: CFG.sheet || 'SLA',
         ticketId: t.cod, horaFinal: t.horaFinal,
         duracion: t.duracion, motivo: t.motivo,
-        notas: t.notas, estado: t.estado
+        notas: t.notas || '', estado: t.estado
       });
     }
     if (ok) sent.push(i);
