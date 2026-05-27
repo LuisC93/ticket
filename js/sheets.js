@@ -173,7 +173,12 @@ async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
-  var d = await sheetFetchRead({ action: 'getAll', sheet: CFG.sheet || 'SLA' });
+  var params = { action: 'getAll', sheet: CFG.sheet || 'SLA' };
+  // Si es Monitor o Monitor/Técnico, filtra por su nombre en el servidor
+  if (currentUser && (currentUser.rol === 'Monitor' || currentUser.rol === 'Monitor/Técnico')) {
+    params.monitor = currentUser.nombre;
+  }
+  var d = await sheetFetchRead(params);
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     tickets = d.rows.map(function(r) {
       return {
