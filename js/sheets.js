@@ -1,25 +1,15 @@
-// sheets.js — v3 fix CORS
+// sheets.js — v4 fix CORS con Image trick
 
 // ── COLA OFFLINE ──
 var pendingQueue = JSON.parse(localStorage.getItem('inc_queue') || '[]');
 function saveQueue() { localStorage.setItem('inc_queue', JSON.stringify(pendingQueue)); }
 
-// ── TOAST GLOBAL ──
+// ── TOAST ──
 (function injectToast() {
   if (document.getElementById('sync-toast')) return;
   var t = document.createElement('div');
   t.id = 'sync-toast';
-  t.style.cssText = [
-    'position:fixed','bottom:24px','right:24px','z-index:9999',
-    'display:flex','align-items:center','gap:10px',
-    'background:#1e293b','color:#fff',
-    'padding:12px 18px','border-radius:12px',
-    'font-family:Inter,sans-serif','font-size:13px','font-weight:500',
-    'box-shadow:0 8px 24px rgba(0,0,0,.25)',
-    'transform:translateY(80px)','opacity:0',
-    'transition:all .3s cubic-bezier(.34,1.56,.64,1)',
-    'max-width:320px','pointer-events:none'
-  ].join(';');
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;background:#1e293b;color:#fff;padding:12px 18px;border-radius:12px;font-family:Inter,sans-serif;font-size:13px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.25);transform:translateY(80px);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);max-width:320px;pointer-events:none';
   document.body.appendChild(t);
 })();
 
@@ -44,44 +34,66 @@ function showToast(msg, type) {
   el.style.opacity = '1';
   clearTimeout(_toastTimer);
   if (type !== 'loading') {
-    _toastTimer = setTimeout(function () {
+    _toastTimer = setTimeout(function() {
       el.style.transform = 'translateY(80px)';
       el.style.opacity = '0';
     }, type === 'err' ? 5000 : 3000);
   }
 }
-function hideToast() {
-  var el = document.getElementById('sync-toast');
-  if (!el) return;
-  clearTimeout(_toastTimer);
-  el.style.transform = 'translateY(80px)';
-  el.style.opacity = '0';
-}
 
-// ── FETCH DIRECTO (sin payload, params en URL) ──
-async function sheetFetch(params, retries) {
-  if (!CFG.url) return null;
-  if (retries === undefined) retries = 3;
-  var q = Object.keys(params).map(function(k) {
-    return encodeURIComponent(k) + '=' + encodeURIComponent(
-      typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
-    );
-  }).join('&');
-  for (var i = 0; i < retries; i++) {
-    try {
-      var controller = new AbortController();
-      var timeout = setTimeout(function() { controller.abort(); }, 15000);
-      var r = await fetch(CFG.url + '?' + q, { signal: controller.signal });
-      clearTimeout(timeout);
-      var text = await r.text();
-      try { return JSON.parse(text); } catch(e) { return null; }
-    } catch(e) {
-      if (i < retries - 1) {
-        await new Promise(function(res) { setTimeout(res, 1000 * (i + 1)); });
+// ── FETCH CON JSONP (sin CORS) ──
+function sheetFetch(params, retries) {
+  return new Promise(function(resolve) {
+    if (!CFG.url) { resolve(null); return; }
+    if (retries === undefined) retries = 3;
+
+    var cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    var attempts = 0;
+
+    function attempt() {
+      attempts++;
+      var q = Object.keys(params).map(function(k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(
+          typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
+        );
+      }).join('&');
+
+      var timeout = setTimeout(function() {
+        cleanup();
+        if (attempts < retries) {
+          setTimeout(attempt, 1000 * attempts);
+        } else {
+          resolve(null);
+        }
+      }, 15000);
+
+      window[cbName] = function(data) {
+        clearTimeout(timeout);
+        cleanup();
+        resolve(data);
+      };
+
+      var script = document.createElement('script');
+      script.src = CFG.url + '?' + q + '&callback=' + cbName;
+      script.onerror = function() {
+        clearTimeout(timeout);
+        cleanup();
+        if (attempts < retries) {
+          setTimeout(attempt, 1000 * attempts);
+        } else {
+          resolve(null);
+        }
+      };
+      document.head.appendChild(script);
+
+      function cleanup() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        delete window[cbName];
       }
     }
-  }
-  return null;
+
+    attempt();
+  });
 }
 
 // ── TEST CONEXION ──
@@ -111,8 +123,8 @@ async function appendToSheet(t) {
   ];
   var d = await sheetFetch({
     action: 'append',
-    sheet: CFG.sheet || 'SLA',
-    row: JSON.stringify(row)
+    sheet:  CFG.sheet || 'SLA',
+    row:    JSON.stringify(row)
   });
   var ok = d && d.status === 'ok';
   if (ok) {
@@ -124,7 +136,7 @@ async function appendToSheet(t) {
     setSyncStatus('err');
     pendingQueue.push({ type: 'append', ticket: t, ts: Date.now() });
     saveQueue();
-    showToast('Sin conexión · Guardado localmente (reintentará automático)', 'warn');
+    showToast('Sin conexión · Guardado localmente', 'warn');
   }
   return ok;
 }
@@ -154,7 +166,7 @@ async function updateRowInSheet(t) {
     setSyncStatus('err');
     pendingQueue.push({ type: 'update', ticket: t, ts: Date.now() });
     saveQueue();
-    showToast('Sin conexión · Cambio pendiente (reintentará automático)', 'warn');
+    showToast('Sin conexión · Cambio pendiente', 'warn');
   }
   return ok;
 }
@@ -168,12 +180,11 @@ async function loadFromSheet() {
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     tickets = d.rows.map(function(r) {
       return {
-        fecha:     fmtFechaDisplay(r[0]), hora:     fmtHora(r[1]),
-        monitor:   r[2],  cod:      r[3],  bloque:   r[4],
-        tipoInc:   r[5],  desc:     r[6],  tipo:     r[7],
-        motivo:    r[8],  tecnico:  r[9],
+        fecha: fmtFechaDisplay(r[0]), hora: fmtHora(r[1]),
+        monitor: r[2], cod: r[3], bloque: r[4], tipoInc: r[5],
+        desc: r[6], tipo: r[7], motivo: r[8], tecnico: r[9],
         horaFinal: fmtHora(r[10]), duracion: r[11],
-        ticketExt: r[12], estado:   r[13] || 'Abierto',
+        ticketExt: r[12], estado: r[13] || 'Abierto',
         notas: '', id: r[3] || Date.now()
       };
     });
@@ -218,7 +229,7 @@ async function flushQueue() {
   if (sent.length) {
     pendingQueue = pendingQueue.filter(function(_, i) { return sent.indexOf(i) === -1; });
     saveQueue();
-    showToast(sent.length + ' cambio(s) pendiente(s) sincronizado(s) ✓', 'ok');
+    showToast(sent.length + ' cambio(s) sincronizado(s) ✓', 'ok');
   }
 }
 
@@ -243,9 +254,7 @@ async function crearTicket() {
   var hora = now.h + ':' + now.m + ' ' + now.ampm;
   var t = {
     fecha:     fmtFechaDisplay(document.getElementById('f-fecha').value || todayISO()),
-    hora:      hora,
-    monitor:   mon,
-    cod:       codVal,
+    hora:      hora, monitor: mon, cod: codVal,
     bloque:    document.getElementById('f-bloque').value    || '—',
     tipoInc:   document.getElementById('f-tipo-inc').value,
     desc:      document.getElementById('f-desc').value      || '—',
@@ -299,12 +308,12 @@ async function cerrarTicket() {
 // ── LIMPIAR FORM ──
 function limpiarForm() {
   ['f-monitor','f-cod','f-bloque','f-tipo-inc','f-tipo','f-desc','f-tec','f-motivo','f-ticket-ext']
-    .forEach(function(id) { var el=document.getElementById(id); if(el) el.value=''; });
-  var fd=document.getElementById('f-fecha'); if(fd) fd.value=todayISO();
-  var now=svNow();
-  var hEl=document.getElementById('f-hora-h'); if(hEl) hEl.value=now.h;
-  var mEl=document.getElementById('f-hora-m'); if(mEl) mEl.value=now.m;
-  var pEl=document.getElementById('f-hora-ampm'); if(pEl) pEl.value=now.ampm;
+    .forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  var fd = document.getElementById('f-fecha'); if (fd) fd.value = todayISO();
+  var now = svNow();
+  var hEl = document.getElementById('f-hora-h'); if (hEl) hEl.value = now.h;
+  var mEl = document.getElementById('f-hora-m'); if (mEl) mEl.value = now.m;
+  var pEl = document.getElementById('f-hora-ampm'); if (pEl) pEl.value = now.ampm;
 }
 
 // ── UPDATE ESTADO MONITOR ──
