@@ -62,67 +62,17 @@ async function sheetFetchRead(params, retries) {
   return null;
 }
 
-// ── FETCH ESCRITURA con payload (append, update) — mejorado con reintentos ──
-async function sheetFetchWrite(data, retries) {
-  if (!CFG.url) {
-    console.error('sheetFetchWrite: CFG.url no está configurada');
+// ── FETCH ESCRITURA con payload (append, update) — no-cors ──
+async function sheetFetchWrite(data) {
+  if (!CFG.url) return false;
+  var payload = encodeURIComponent(JSON.stringify(data));
+  try {
+    await fetch(CFG.url + '?payload=' + payload, { mode: 'no-cors' });
+    return true;
+  } catch(e) {
+    console.warn('sheetFetchWrite error:', e);
     return false;
   }
-  
-  if (retries === undefined) retries = 3;
-  
-  var payload = encodeURIComponent(JSON.stringify(data));
-  var url = CFG.url + '?payload=' + payload;
-  
-  for (var i = 0; i < retries; i++) {
-    try {
-      var controller = new AbortController();
-      var timeout = setTimeout(function() { controller.abort(); }, 12000); // 12s timeout
-      
-      var response = await fetch(url, { 
-        method: 'GET',
-        signal: controller.signal 
-      });
-      
-      clearTimeout(timeout);
-      
-      if (!response.ok) {
-        console.warn('sheetFetchWrite: HTTP ' + response.status + ' en intento ' + (i+1));
-        if (i < retries - 1) {
-          await new Promise(function(res) { setTimeout(res, 1000 * (i+1)); });
-          continue;
-        }
-        return false;
-      }
-      
-      try {
-        var result = await response.json();
-        if (result && result.status === 'ok') {
-          console.log('sheetFetchWrite: Éxito', data.action);
-          return true;
-        } else {
-          console.warn('sheetFetchWrite: Respuesta inválida', result);
-          if (i < retries - 1) {
-            await new Promise(function(res) { setTimeout(res, 1000 * (i+1)); });
-            continue;
-          }
-          return false;
-        }
-      } catch(parseErr) {
-        // Si no puede parsear JSON, asume que funcionó (compatibilidad con no-cors)
-        console.log('sheetFetchWrite: OK (no pudo leer respuesta JSON, asumiendo éxito)');
-        return true;
-      }
-    } catch(e) {
-      console.warn('sheetFetchWrite error en intento ' + (i+1) + ':', e.message);
-      if (i < retries - 1) {
-        await new Promise(function(res) { setTimeout(res, 1000 * (i+1)); });
-      }
-    }
-  }
-  
-  console.error('sheetFetchWrite: Falló después de ' + retries + ' intentos');
-  return false;
 }
 
 // Alias para compatibilidad con loadFromSheet

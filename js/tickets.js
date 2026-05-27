@@ -54,18 +54,3 @@ function inRange(fechaStr,filter){
     return true;
   }catch(e){return true;}
 }
-
-// ── SYNC STATUS ──
-function setSyncStatus(s){
-  var el=document.getElementById('sync-status');
-  if(!el) return;
-  var map={ok:'✓ Sincronizado',syncing:'↺ Sincronizando...',err:'✗ Sin conexión'};
-  el.textContent=map[s]||s;
-  el.className='sync-status sync-'+s;
-}
-function showAlert(okId,errId,msg){
-  var ok=document.getElementById(okId);
-  var err=document.getElementById(errId);
-  if(ok){ok.textContent=msg;ok.style.display='block';setTimeout(function(){ok.style.display='none';},3000);}
-  if(err) err.style.display='none';
-}
