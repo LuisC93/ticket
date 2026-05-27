@@ -174,8 +174,8 @@ async function loadFromSheet() {
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
   var params = { action: 'getAll', sheet: CFG.sheet || 'SLA' };
-  // Si es Monitor o Monitor/Técnico, filtra por su nombre en el servidor
-  if (currentUser && (currentUser.rol === 'Monitor' || currentUser.rol === 'Monitor/Técnico')) {
+  // Solo Monitor puro filtra por nombre — Monitor/Técnico, Técnico y Admin descargan todo
+  if (currentUser && currentUser.rol === 'Monitor') {
     params.monitor = currentUser.nombre;
   }
   var d = await sheetFetchRead(params);
