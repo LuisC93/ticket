@@ -1,6 +1,13 @@
 // config.js — Estado global, configuración y mapa de bloques
 
-var CFG = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+// ── URL DEL SCRIPT (ya configurada, no requiere setup manual) ──
+var CFG_DEFAULT = {
+  url:   'https://script.google.com/macros/s/AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91/exec',
+  sheet: 'SLA'
+};
+var CFG_SAVED = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+// Siempre usa la URL del código, pero respeta si el admin cambió la hoja
+var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED, { url: CFG_DEFAULT.url });
 var tickets = JSON.parse(localStorage.getItem('inc_data') || '[]');
 var activeFilter = 'all', monFilter = 'all', dayFilter = 'today', tecDayFilter = 'today';
 var activeIdx = null;
@@ -56,8 +63,10 @@ function saveConfig() {
   cargarBloques(); // carga bloques al guardar config
 }
 function loadConfig() {
-  if (CFG.url) document.getElementById('cfg-url').value = CFG.url;
-  if (CFG.sheet) document.getElementById('cfg-sheet').value = CFG.sheet;
+  var urlEl = document.getElementById('cfg-url');
+  var sheetEl = document.getElementById('cfg-sheet');
+  if (urlEl) urlEl.value = CFG.url || CFG_DEFAULT.url;
+  if (sheetEl) sheetEl.value = CFG.sheet || 'SLA';
   if (CFG.url) { setSyncStatus('ok'); cargarBloques(); }
 }
 function toggleConfig() {
