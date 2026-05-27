@@ -168,7 +168,7 @@
                 <option>Jose Cruz</option><option>Jonatan</option><option>Linda</option>
               </select>
             </div>
-            <div class="field"><label>Código</label><input type="text" id="f-cod" placeholder="10441" oninput="autoBloque(this.value)" maxlength="5" maxlength="5" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,5)" onblur="validarCod(this)"></div>
+            <div class="field"><label>Código</label><input type="text" id="f-cod" placeholder="10441" maxlength="5" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,5);autoBloque(this.value)" onblur="validarCod(this)"></div>
           </div>
           <div class="row2">
             <div class="field"><label>Fecha *</label><input type="date" id="f-fecha" readonly style="background:var(--bg);cursor:default"></div>
@@ -351,7 +351,6 @@
 <script src="js/sheets.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
-<script src="js/auth.js"></script>
 
 <!-- EDIT MODAL -->
 <div id="edit-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;backdrop-filter:blur(2px)" onclick="closeEdit()"></div>
