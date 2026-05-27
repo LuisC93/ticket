@@ -4,8 +4,8 @@
 // ═══════════════════════════════════════════
 //  CONFIGURACIÓN JSONBIN  ← edita esto
 // ═══════════════════════════════════════════
-var JSONBIN_BIN_ID  = '';   // Ej: '6650a1f2ad19ca34f8a1b2c3'
-var JSONBIN_API_KEY = '';   // Ej: '$2a$10$...'
+var JSONBIN_BIN_ID  = '6a163616f47d5c455c3b2caa';   // Ej: '6650a1f2ad19ca34f8a1b2c3'
+var JSONBIN_API_KEY = '$2a$10$qGBnsriYX1NxX7wkS3Swx.t9Mz3edZUj9oFKVkDtfin4IrZF7ss2O';   // Ej: '$2a$10$...'
 // ═══════════════════════════════════════════
 
 var AUTH_SESSION_KEY = 'mce_session';
