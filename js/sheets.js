@@ -114,6 +114,7 @@ async function appendToSheet(t) {
   if (ok) {
     setSyncStatus('ok');
     showToast('Guardado en Google Sheets ✓', 'ok');
+    updateEstadoMonitor(t, false); // actualiza hoja del monitor
     flushQueue(); // intenta enviar pendientes
   } else {
     setSyncStatus('err');
@@ -142,6 +143,7 @@ async function updateRowInSheet(t) {
   if (ok) {
     setSyncStatus('ok');
     showToast('Ticket actualizado en Sheets ✓', 'ok');
+    updateEstadoMonitor(t, true); // al cerrar → Navegación estable
     flushQueue();
   } else {
     setSyncStatus('err');
@@ -294,4 +296,34 @@ function limpiarForm() {
   var mEl = document.getElementById('f-hora-m'); if (mEl) mEl.value = now.m;
   var pEl = document.getElementById('f-hora-ampm'); if (pEl) pEl.value = now.ampm;
   document.getElementById('f-fecha').value = todayISO();
+}
+// ── UPDATE ESTADO MONITOR ──
+// Se llama automáticamente al crear o cerrar un ticket
+async function updateEstadoMonitor(t, cerrar) {
+  if (!CFG.url) return;
+  if (!t.cod || !t.monitor) return;
+
+  var params = {
+    action:  'updateEstado',
+    cod:     t.cod,
+    monitor: t.monitor,
+    tipoInc: t.tipoInc || t.tipo || '',
+    fecha:   isoFromTicket(t.fecha),
+    cerrar:  cerrar ? 'true' : 'false'
+  };
+
+  try {
+    var q = Object.keys(params).map(function(k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    var r = await fetch(CFG.url + '?' + q);
+    var d = await r.json();
+    if (d && d.status === 'ok') {
+      console.log('Estado monitor actualizado:', d);
+    } else {
+      console.warn('updateEstado warn:', d && d.message);
+    }
+  } catch(e) {
+    console.warn('updateEstadoMonitor error:', e);
+  }
 }
