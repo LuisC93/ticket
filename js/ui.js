@@ -14,7 +14,8 @@ function setSyncStatus(s){
 function renderAll(){updateMetrics();renderOpenCards();renderMonitorHist();renderTecnico();}
 
 function updateMetrics(){
-  var vis=getVisibleTickets();
+  var vis=getVisibleTickets('monitor');
+  var visAll=getVisibleTickets('tecnico');
   var today=todayISO();
   var todayTickets=vis.filter(function(t){return isoFromTicket(t.fecha)===today;});
   var open=vis.filter(function(t){return t.estado==='Abierto';});
@@ -23,9 +24,9 @@ function updateMetrics(){
   document.getElementById('m-open').textContent=open.length;
   document.getElementById('m-closed').textContent=closed.length;
   document.getElementById('m-total').textContent=todayTickets.length;
-  document.getElementById('t-total').textContent=vis.length;
-  document.getElementById('t-pend').textContent=open.length;
-  document.getElementById('t-res').textContent=closed.filter(function(t){return isoFromTicket(t.fecha)===today;}).length;
+  document.getElementById('t-total').textContent=visAll.length;
+  document.getElementById('t-pend').textContent=visAll.filter(function(t){return t.estado==='Abierto';}).length;
+  document.getElementById('t-res').textContent=visAll.filter(function(t){return t.estado==='Cerrado'&&isoFromTicket(t.fecha)===today;}).length;
   document.getElementById('top-open').textContent=open.length;
   document.getElementById('top-closed').textContent=closed.length;
   var sub=todayTickets.length+' tickets · '+open.length+' activos, '+closed.length+' cerrados';
@@ -37,7 +38,7 @@ function updateMetrics(){
 
 function renderOpenCards(){
   var el=document.getElementById('open-tickets-list');
-  var vis=getVisibleTickets();
+  var vis=getVisibleTickets('monitor');
   var list=vis.filter(function(t){return t.estado==='Abierto'&&inRange(t.fecha,dayFilter);});
   if(monFilter==='Cerrado') list=[];
   document.getElementById('open-count').textContent=list.length;
@@ -123,7 +124,7 @@ function buildDayGroups(list, readOnly){
 function renderMonitorHist(){
   var q=(document.getElementById('search-mon').value||'').toLowerCase();
   var selDate=document.getElementById('hist-date').value;
-  var vis=getVisibleTickets();
+  var vis=getVisibleTickets('monitor');
   var list=vis.filter(function(t){
     var mf=monFilter==='all'||t.estado===monFilter;
     var mq=!q||[t.tipo,t.monitor,t.cod,t.tecnico,t.desc].some(function(v){return String(v).toLowerCase().includes(q);});
@@ -137,7 +138,7 @@ function renderMonitorHist(){
 function renderTecnico(){
   var q=(document.getElementById('search-tec').value||'').toLowerCase();
   var selDate=(document.getElementById('tec-hist-date')||{value:''}).value;
-  var vis=getVisibleTickets();
+  var vis=getVisibleTickets('tecnico');
   var openList=vis.filter(function(t){return t.estado==='Abierto'&&inRange(t.fecha,tecDayFilter);});
   document.getElementById('tec-open-count').textContent=openList.length;
   var openEl=document.getElementById('tec-open-list');
@@ -327,12 +328,17 @@ function autoBloqueEdit(cod) {
   }
 }
 // ── FILTRO POR ROL/USUARIO ──
-function getVisibleTickets() {
+function getVisibleTickets(panel) {
   if (!currentUser) return tickets;
   var rol = currentUser.rol;
-  // Técnico y Admin ven todo
-  if (rol === 'Técnico' || rol === 'Admin') return tickets;
-  // Monitor y Monitor/Técnico solo ven sus tickets
+  // Admin y Técnico ven todo siempre
+  if (rol === 'Admin' || rol === 'Técnico') return tickets;
+  // Monitor/Técnico: en panel técnico ven todo, en monitor solo los suyos
+  if (rol === 'Monitor/Técnico') {
+    if (panel === 'tecnico') return tickets;
+    // panel monitor → solo los suyos
+  }
+  // Monitor y Monitor/Técnico en panel monitor → solo sus tickets
   var nombre = currentUser.nombre.trim().toLowerCase();
   return tickets.filter(function(t) {
     return String(t.monitor || '').trim().toLowerCase() === nombre;
