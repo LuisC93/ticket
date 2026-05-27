@@ -1,4 +1,4 @@
-// sheets.js — v4 fix CORS con Image trick
+// sheets.js — v5 no-cors fire-and-forget
 
 // ── COLA OFFLINE ──
 var pendingQueue = JSON.parse(localStorage.getItem('inc_queue') || '[]');
@@ -41,59 +41,51 @@ function showToast(msg, type) {
   }
 }
 
-// ── FETCH CON JSONP (sin CORS) ──
-function sheetFetch(params, retries) {
-  return new Promise(function(resolve) {
-    if (!CFG.url) { resolve(null); return; }
-    if (retries === undefined) retries = 3;
-
-    var cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    var attempts = 0;
-
-    function attempt() {
-      attempts++;
-      var q = Object.keys(params).map(function(k) {
-        return encodeURIComponent(k) + '=' + encodeURIComponent(
-          typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
-        );
-      }).join('&');
-
-      var timeout = setTimeout(function() {
-        cleanup();
-        if (attempts < retries) {
-          setTimeout(attempt, 1000 * attempts);
-        } else {
-          resolve(null);
-        }
-      }, 15000);
-
-      window[cbName] = function(data) {
-        clearTimeout(timeout);
-        cleanup();
-        resolve(data);
-      };
-
-      var script = document.createElement('script');
-      script.src = CFG.url + '?' + q + '&callback=' + cbName;
-      script.onerror = function() {
-        clearTimeout(timeout);
-        cleanup();
-        if (attempts < retries) {
-          setTimeout(attempt, 1000 * attempts);
-        } else {
-          resolve(null);
-        }
-      };
-      document.head.appendChild(script);
-
-      function cleanup() {
-        if (script.parentNode) script.parentNode.removeChild(script);
-        delete window[cbName];
-      }
+// ── FETCH CON LECTURA (para getAll/ping/getBloques) ──
+async function sheetFetchRead(params, retries) {
+  if (!CFG.url) return null;
+  if (retries === undefined) retries = 3;
+  var q = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(
+      typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
+    );
+  }).join('&');
+  for (var i = 0; i < retries; i++) {
+    try {
+      var controller = new AbortController();
+      var timeout = setTimeout(function() { controller.abort(); }, 15000);
+      var r = await fetch(CFG.url + '?' + q, { signal: controller.signal });
+      clearTimeout(timeout);
+      var text = await r.text();
+      try { return JSON.parse(text); } catch(e) { return null; }
+    } catch(e) {
+      if (i < retries - 1) await new Promise(function(res) { setTimeout(res, 1000 * (i+1)); });
     }
+  }
+  return null;
+}
 
-    attempt();
-  });
+// ── FETCH SIN CORS (para append/update/updateEstado) ──
+// Usa no-cors: no podemos leer la respuesta pero SÍ se ejecuta en el servidor
+async function sheetFetchWrite(params) {
+  if (!CFG.url) return false;
+  var q = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(
+      typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]
+    );
+  }).join('&');
+  try {
+    await fetch(CFG.url + '?' + q, { mode: 'no-cors' });
+    return true; // no-cors siempre "ok" si no hay error de red
+  } catch(e) {
+    console.warn('sheetFetchWrite error:', e);
+    return false;
+  }
+}
+
+// Alias para compatibilidad
+async function sheetFetch(params, retries) {
+  return sheetFetchRead(params, retries);
 }
 
 // ── TEST CONEXION ──
@@ -101,7 +93,7 @@ async function testConnection() {
   if (!CFG.url) { alert('Primero guarda la URL.'); return; }
   setSyncStatus('syncing');
   showToast('Probando conexión...', 'loading');
-  var d = await sheetFetch({ action: 'ping' });
+  var d = await sheetFetchRead({ action: 'ping' });
   if (d && d.status === 'ok') {
     setSyncStatus('ok');
     showToast('Conexión exitosa ✓', 'ok');
@@ -121,17 +113,16 @@ async function appendToSheet(t) {
     t.tipoInc, t.desc, t.tipo, t.motivo, t.tecnico,
     t.horaFinal, t.duracion, t.ticketExt, t.estado
   ];
-  var d = await sheetFetch({
+  var ok = await sheetFetchWrite({
     action: 'append',
     sheet:  CFG.sheet || 'SLA',
     row:    JSON.stringify(row)
   });
-  var ok = d && d.status === 'ok';
   if (ok) {
     setSyncStatus('ok');
     showToast('Guardado en Google Sheets ✓', 'ok');
     updateEstadoMonitor(t, false);
-    flushQueue();
+    setTimeout(flushQueue, 2000);
   } else {
     setSyncStatus('err');
     pendingQueue.push({ type: 'append', ticket: t, ts: Date.now() });
@@ -146,7 +137,7 @@ async function updateRowInSheet(t) {
   if (!CFG.url) return false;
   setSyncStatus('syncing');
   showToast('Actualizando ticket...', 'loading');
-  var d = await sheetFetch({
+  var ok = await sheetFetchWrite({
     action:    'update',
     sheet:     CFG.sheet || 'SLA',
     ticketId:  t.cod,
@@ -156,12 +147,11 @@ async function updateRowInSheet(t) {
     notas:     t.notas     || '',
     estado:    t.estado    || 'Cerrado'
   });
-  var ok = d && d.status === 'ok';
   if (ok) {
     setSyncStatus('ok');
     showToast('Ticket actualizado en Sheets ✓', 'ok');
     updateEstadoMonitor(t, true);
-    flushQueue();
+    setTimeout(flushQueue, 2000);
   } else {
     setSyncStatus('err');
     pendingQueue.push({ type: 'update', ticket: t, ts: Date.now() });
@@ -176,7 +166,7 @@ async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
-  var d = await sheetFetch({ action: 'getAll', sheet: CFG.sheet || 'SLA' });
+  var d = await sheetFetchRead({ action: 'getAll', sheet: CFG.sheet || 'SLA' });
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     tickets = d.rows.map(function(r) {
       return {
@@ -212,17 +202,15 @@ async function flushQueue() {
         item.ticket.tipo, item.ticket.motivo, item.ticket.tecnico,
         item.ticket.horaFinal, item.ticket.duracion, item.ticket.ticketExt, item.ticket.estado
       ];
-      var d = await sheetFetch({ action: 'append', sheet: CFG.sheet || 'SLA', row: JSON.stringify(row) });
-      ok = d && d.status === 'ok';
+      ok = await sheetFetchWrite({ action: 'append', sheet: CFG.sheet || 'SLA', row: JSON.stringify(row) });
     } else if (item.type === 'update') {
       var t = item.ticket;
-      var d2 = await sheetFetch({
+      ok = await sheetFetchWrite({
         action: 'update', sheet: CFG.sheet || 'SLA',
         ticketId: t.cod, horaFinal: t.horaFinal,
         duracion: t.duracion, motivo: t.motivo,
         notas: t.notas, estado: t.estado
       });
-      ok = d2 && d2.status === 'ok';
     }
     if (ok) sent.push(i);
   }
@@ -300,9 +288,7 @@ async function cerrarTicket() {
   document.getElementById('resolve-section').style.display = 'none';
   document.getElementById('closed-msg').style.display = 'block';
   setTimeout(closeDrawer, 800);
-  updateRowInSheet(t).then(function(ok) {
-    if (!ok) console.warn('Cambio guardado en cola offline.');
-  });
+  updateRowInSheet(t);
 }
 
 // ── LIMPIAR FORM ──
@@ -320,7 +306,7 @@ function limpiarForm() {
 async function updateEstadoMonitor(t, cerrar) {
   if (!CFG.url || !t.cod || !t.monitor) return;
   try {
-    await sheetFetch({
+    await sheetFetchWrite({
       action:  'updateEstado',
       cod:     t.cod,
       monitor: t.monitor,
