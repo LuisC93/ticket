@@ -221,12 +221,14 @@
             <div class="field"><label>Motivo probable</label>
               <select id="f-motivo">
                 <option value="">—</option>
-                <option>Visita técnica</option><option>Reconfiguración</option>
-                <option>Falla de ISP</option><option>Falla de plataforma</option>
-                <option>Corte de suministro eléctrico</option>
-                <option>Configuración de Equipos Apagados</option>
-                <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
-                <option>Configuración de Chromebook</option>
+                <option>Reconfiguración LAN (MINED)</option>
+                <option>Corte de fibra optica</option>
+                <option>Límite de sesiones alcanzado</option>
+                <option>Apoyo a usuario</option>
+                <option>Configuracion de Equipos Apagados</option>
+                <option>Reconfiguración WAN (ISP)</option>
+                <option>Corte de suministro electrico</option>
+                <option>cambio de equipo (ISP)</option>
               </select>
             </div>
           </div>
@@ -327,13 +329,16 @@
         <div style="display:none"><input type="hidden" id="r-hora-h"><input type="hidden" id="r-hora-m"><input type="hidden" id="r-hora-ampm"></div>
         <div class="field"><label>Motivo solución</label>
           <select id="r-motivo">
-            <option>Visita técnica</option><option>Reconfiguración</option>
-            <option>Falla de ISP</option><option>Falla de plataforma</option>
-            <option>Corte de suministro eléctrico</option>
-            <option>Configuración de Equipos Apagados</option>
-            <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
-            <option>Configuración de Chromebook</option>
-          </select>
+                <option value="">—</option>
+                <option>Reconfiguración LAN (MINED)</option>
+                <option>Corte de fibra optica</option>
+                <option>Límite de sesiones alcanzado</option>
+                <option>Apoyo a usuario</option>
+                <option>Configuracion de Equipos Apagados</option>
+                <option>Reconfiguración WAN (ISP)</option>
+                <option>Corte de suministro electrico</option>
+                <option>cambio de equipo (ISP)</option>
+              </select>
         </div>
       </div>
       <div class="field" style="margin-bottom:14px"><label>Notas</label><textarea id="r-notas" placeholder="Detalla la solución..."></textarea></div>
@@ -427,15 +432,17 @@
       </div>
       <div style="display:flex;flex-direction:column;gap:5px">
         <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Motivo</label>
-        <select id="e-motivo" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif">
-          <option value="">—</option>
-          <option>Visita técnica</option><option>Reconfiguración</option>
-          <option>Falla de ISP</option><option>Falla de plataforma</option>
-          <option>Corte de suministro eléctrico</option>
-          <option>Configuración de Equipos Apagados</option>
-          <option>Problema de usuario</option><option>Límite de sesiones alcanzado</option>
-          <option>Configuración de Chromebook</option>
-        </select>
+        <select id="e-motivo" style="border:1.5px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;font-family:Inter,sans-serif;color:#111827;outline:none">
+                <option value="">—</option>
+                <option>Reconfiguración LAN (MINED)</option>
+                <option>Corte de fibra optica</option>
+                <option>Límite de sesiones alcanzado</option>
+                <option>Apoyo a usuario</option>
+                <option>Configuracion de Equipos Apagados</option>
+                <option>Reconfiguración WAN (ISP)</option>
+                <option>Corte de suministro electrico</option>
+                <option>cambio de equipo (ISP)</option>
+              </select>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:5px">
