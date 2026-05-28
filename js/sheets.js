@@ -131,7 +131,6 @@ async function appendToSheet(t) {
     setSyncStatus('ok');
     showToast('Guardado en Google Sheets ✓', 'ok');
     updateEstadoMonitor(t, false);
-    setTimeout(flushQueue, 2000);
   } else {
     setSyncStatus('err');
     pendingQueue.push({ type: 'append', ticket: t, ts: Date.now() });
@@ -159,7 +158,6 @@ async function updateRowInSheet(t) {
     setSyncStatus('ok');
     showToast('Ticket actualizado en Sheets ✓', 'ok');
     updateEstadoMonitor(t, true);
-    setTimeout(flushQueue, 2000);
   } else {
     setSyncStatus('err');
     pendingQueue.push({ type: 'update', ticket: t, ts: Date.now() });
@@ -200,11 +198,17 @@ async function loadFromSheet() {
   }
 }
 
+// ── COLA OFFLINE: FLUSH ──
+var _flushRunning = false;
 async function flushQueue() {
-  if (!pendingQueue.length || !CFG.url) return;
+  if (_flushRunning || !pendingQueue.length || !CFG.url) return;
+  _flushRunning = true;
   var sent = [];
   for (var i = 0; i < pendingQueue.length; i++) {
     var item = pendingQueue[i];
+    // Si el item lleva más de 3 intentos, descartarlo
+    item.attempts = (item.attempts || 0) + 1;
+    if (item.attempts > 3) { sent.push(i); continue; }
     var ok = false;
     if (item.type === 'append') {
       var row = [
@@ -228,8 +232,9 @@ async function flushQueue() {
   if (sent.length) {
     pendingQueue = pendingQueue.filter(function(_, i) { return sent.indexOf(i) === -1; });
     saveQueue();
-    showToast(sent.length + ' cambio(s) sincronizado(s) ✓', 'ok');
+    if (pendingQueue.length === 0) showToast('Cambios sincronizados ✓', 'ok');
   }
+  _flushRunning = false;
 }
 
 window.addEventListener('online', function() {
@@ -240,6 +245,19 @@ window.addEventListener('offline', function() {
   setSyncStatus('err');
   showToast('Sin conexión a internet', 'err');
 });
+
+// ── AUTO-SYNC al iniciar y cada 1 minuto ──
+function autoSync() {
+  if (!CFG.url) return;
+  if (document.hidden) return;
+  loadFromSheet();
+}
+
+// Sincronizar al cargar (espera 2s para que todo esté listo)
+setTimeout(autoSync, 2000);
+
+// Luego cada 1 minuto
+setInterval(autoSync, 60 * 1000);
 
 async function crearTicket() {
   var mon  = document.getElementById('f-monitor').value;
