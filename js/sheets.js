@@ -246,17 +246,14 @@ window.addEventListener('offline', function() {
   showToast('Sin conexión a internet', 'err');
 });
 
-// ── AUTO-SYNC al iniciar y cada 1 minuto ──
+// ── AUTO-SYNC cada 1 minuto ──
 function autoSync() {
-  if (!CFG.url) return;
+  if (!CFG.url || !currentUser) return;
   if (document.hidden) return;
   loadFromSheet();
 }
 
-// Sincronizar al cargar (espera 2s para que todo esté listo)
-setTimeout(autoSync, 2000);
-
-// Luego cada 1 minuto
+// Cada 1 minuto
 setInterval(autoSync, 60 * 1000);
 
 async function crearTicket() {

@@ -150,6 +150,11 @@ function showMainApp() {
   applyRoleUI();
   updateTopbarUser();
 
+  // Auto-sync al entrar
+  setTimeout(function(){
+    if(typeof loadFromSheet==='function') loadFromSheet();
+  }, 1000);
+
   // Mostrar aviso de configuración si falta JSONBin
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
     setTimeout(function(){
