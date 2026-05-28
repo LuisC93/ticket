@@ -167,13 +167,28 @@ async function updateRowInSheet(t) {
   return ok;
 }
 
+// ── REASIGNAR MONITOR (un ticket) ──
+// Identifica la fila por fecha + hora + cod (más preciso que solo el código,
+// que puede repetirse) y cambia la columna "monitor".
+async function reassignInSheet(t) {
+  if (!CFG.url) return false;
+  return await sheetFetchWrite({
+    action:   'reassign',
+    sheet:    CFG.sheet || 'SLA',
+    ticketId: t.cod,
+    fecha:    isoFromTicket(t.fecha),
+    hora:     t.hora || '',
+    monitor:  t.monitor || ''
+  });
+}
+
 async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
   var params = { action: 'getAll', sheet: CFG.sheet || 'SLA' };
-  // Solo Monitor puro filtra por nombre — Monitor/Técnico, Técnico y Admin descargan todo
-  if (currentUser && currentUser.rol === 'Monitor') {
+  // Monitor/Técnico solo descarga sus propias filas. Técnico y Admin descargan todo.
+  if (currentUser && currentUser.rol === 'Monitor/Técnico') {
     params.monitor = currentUser.nombre;
   }
   var d = await sheetFetchRead(params);
@@ -226,6 +241,13 @@ async function flushQueue() {
         duracion: t.duracion, motivo: t.motivo,
         notas: t.notas || '', estado: t.estado
       });
+    } else if (item.type === 'reassign') {
+      var tr = item.ticket;
+      ok = await sheetFetchWrite({
+        action: 'reassign', sheet: CFG.sheet || 'SLA',
+        ticketId: tr.cod, fecha: isoFromTicket(tr.fecha),
+        hora: tr.hora || '', monitor: tr.monitor || ''
+      });
     }
     if (ok) sent.push(i);
   }
@@ -257,7 +279,7 @@ function autoSync() {
 setInterval(autoSync, 60 * 1000);
 
 async function crearTicket() {
-  var mon  = document.getElementById('f-monitor').value;
+  var mon  = document.getElementById('f-monitor').value || getMonitorDia();
   var tipo = document.getElementById('f-tipo').value;
   if (!mon || !tipo) { showToast('Completa: Monitor y Problema.', 'err'); return; }
   var codVal = document.getElementById('f-cod').value;
@@ -318,6 +340,8 @@ function limpiarForm() {
   ['f-monitor','f-cod','f-bloque','f-tipo-inc','f-tipo','f-desc','f-tec','f-motivo','f-ticket-ext']
     .forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
   var fd = document.getElementById('f-fecha'); if (fd) fd.value = todayISO();
+  // Reestablece el monitor del día en el formulario
+  var fm = document.getElementById('f-monitor'); if (fm) fm.value = getMonitorDia();
   var now = svNow();
   var hEl = document.getElementById('f-hora-h'); if (hEl) hEl.value = now.h;
   var mEl = document.getElementById('f-hora-m'); if (mEl) mEl.value = now.m;

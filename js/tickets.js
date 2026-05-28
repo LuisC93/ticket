@@ -40,6 +40,12 @@ function isoFromTicket(v){
   if(s.match(/\d{2}\/\d{2}\/\d{4}/)){var p=s.split('/');return p[2]+'-'+p[1]+'-'+p[0];}
   return s.slice(0,10);
 }
+
+// Identificador estable de un ticket (sobrevive a re-renders y sincronizaciones).
+// No usamos el índice del arreglo porque cambia al recargar desde Sheets.
+function ticketUID(t){
+  return isoFromTicket(t.fecha)+'|'+(t.hora||'')+'|'+(t.cod||'')+'|'+(t.tipo||'');
+}
 function inRange(fechaStr,filter){
   var now=new Date(); now.setHours(0,0,0,0);
   try{

@@ -1,5 +1,9 @@
 // config.js — Estado global, configuración y mapa de bloques
 
+// Usuario activo. Se declara aquí (primer script en cargar) para que cualquier
+// render inicial pueda leerlo sin error. auth.js lo asigna tras el login.
+var currentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
+
 // ── URL DEL SCRIPT (ya configurada, no requiere setup manual) ──
 var CFG_DEFAULT = {
   url:   'https://script.google.com/macros/s/AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91/exec',
@@ -14,6 +18,45 @@ var activeIdx = null;
 
 // ── MAPA BLOQUES (código → bloque) ──
 var bloquesMap = JSON.parse(localStorage.getItem('inc_bloques') || '{}');
+
+// ── LISTA CENTRAL DE MONITORES (una sola fuente de verdad) ──
+// Se usa para: formulario nuevo, modal editar, monitor del día y reasignación masiva.
+var MONITORS = ['Jose Luis','Boris','Jimmy','Marta','Luis Yanes','Sandor','Jose Cruz','Jonatan','Linda'];
+
+// ── MONITOR DEL DÍA ──
+// Se guarda por día. Si cambia el turno durante el día, se actualiza y los
+// tickets nuevos se autocompletan con el nuevo monitor.
+function getMonitorDia() {
+  try {
+    var raw = JSON.parse(localStorage.getItem('inc_monitor_dia') || 'null');
+    if (raw && raw.fecha === todayISO() && raw.nombre) return raw.nombre;
+  } catch (e) {}
+  // Default del día: si el usuario es Monitor/Técnico, su propio nombre.
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.rol === 'Monitor/Técnico') {
+    return currentUser.nombre || '';
+  }
+  return '';
+}
+function setMonitorDia(nombre) {
+  localStorage.setItem('inc_monitor_dia', JSON.stringify({ fecha: todayISO(), nombre: nombre || '' }));
+}
+
+// ── HELPER: llenar un <select> desde un arreglo ──
+function fillSelect(id, items, opts) {
+  opts = opts || {};
+  var el = document.getElementById(id);
+  if (!el) return;
+  var current = el.value;
+  var html = '';
+  if (opts.placeholder) html += '<option value="">' + opts.placeholder + '</option>';
+  // Asegura que el valor preseleccionado exista aunque no esté en la lista
+  var list = items.slice();
+  if (opts.preselect && list.indexOf(opts.preselect) === -1) list.unshift(opts.preselect);
+  html += list.map(function(v){ return '<option>' + v + '</option>'; }).join('');
+  el.innerHTML = html;
+  if (opts.preselect) el.value = opts.preselect;
+  else if (current) el.value = current;
+}
 
 function saveLocal() { localStorage.setItem('inc_data', JSON.stringify(tickets)); }
 

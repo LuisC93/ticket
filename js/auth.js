@@ -13,10 +13,18 @@ var AUTH_CACHE_KEY   = 'mce_users_cache';
 
 var AUTH_PERMS = {
   'Admin':           { crear:true,  cerrar:true,  editar:true,  verTodos:true,  usuarios:true,  config:true  },
-  'Monitor':         { crear:true,  cerrar:false, editar:false, verTodos:false, usuarios:false, config:false },
   'Monitor/Técnico': { crear:true,  cerrar:true,  editar:false, verTodos:false, usuarios:false, config:false },
-  'Técnico':         { crear:false, cerrar:true,  editar:false, verTodos:false, usuarios:false, config:false }
+  'Técnico':         { crear:false, cerrar:true,  editar:false, verTodos:true,  usuarios:false, config:false }
 };
+
+// Migración: usuarios con el rol antiguo "Monitor" pasan a "Monitor/Técnico".
+function normalizeUsers(users) {
+  if (!Array.isArray(users)) return users;
+  return users.map(function(u){
+    if (u && u.rol === 'Monitor') u.rol = 'Monitor/Técnico';
+    return u;
+  });
+}
 
 var AUTH_DEFAULT_USERS = [
   { id:1, nombre:'Administrador', username:'admin', password:'admin123', rol:'Admin' }
@@ -31,21 +39,21 @@ async function jsonbinGet() {
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
     // Sin configurar → usar cache local o defaults
     var c = localStorage.getItem(AUTH_CACHE_KEY);
-    return c ? JSON.parse(c) : JSON.parse(JSON.stringify(AUTH_DEFAULT_USERS));
+    return normalizeUsers(c ? JSON.parse(c) : JSON.parse(JSON.stringify(AUTH_DEFAULT_USERS)));
   }
   try {
     var r = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID + '/latest', {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
     var d = await r.json();
-    var users = d.record && d.record.users ? d.record.users : AUTH_DEFAULT_USERS;
+    var users = normalizeUsers(d.record && d.record.users ? d.record.users : AUTH_DEFAULT_USERS);
     localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(users));
     _usersCache = users;
     return users;
   } catch(e) {
     console.warn('JSONBin offline, usando cache:', e);
     var c2 = localStorage.getItem(AUTH_CACHE_KEY);
-    return c2 ? JSON.parse(c2) : JSON.parse(JSON.stringify(AUTH_DEFAULT_USERS));
+    return normalizeUsers(c2 ? JSON.parse(c2) : JSON.parse(JSON.stringify(AUTH_DEFAULT_USERS)));
   }
 }
 
@@ -178,6 +186,9 @@ function applyRoleUI() {
     var btnMon = document.querySelector('.sidebar-item[onclick*="monitor"]');
     if (btnMon) btnMon.click();
   }
+  // Con el usuario ya cargado, refresca el monitor del día y los selects.
+  if (typeof populateMonitorSelects === 'function') populateMonitorSelects();
+  if (typeof renderMonitorDiaBanner === 'function') renderMonitorDiaBanner();
 }
 
 // ── TOPBAR USER ──
@@ -253,11 +264,10 @@ function toggleUserMenu() {
 function roleStyle(rol) {
   var map={
     'Admin':           {bg:'#eff6ff',color:'#2563eb',av:'#2563eb'},
-    'Monitor':         {bg:'#f0fdf4',color:'#16a34a',av:'#16a34a'},
     'Monitor/Técnico': {bg:'#f5f3ff',color:'#7c3aed',av:'#7c3aed'},
     'Técnico':         {bg:'#fffbeb',color:'#d97706',av:'#d97706'}
   };
-  return map[rol]||map['Monitor'];
+  return map[rol]||map['Monitor/Técnico'];
 }
 
 // ── PANEL USUARIOS ──
@@ -322,7 +332,7 @@ function openNewUser() {
   document.getElementById('umodal-nombre').value='';
   document.getElementById('umodal-username').value='';
   document.getElementById('umodal-password').value='';
-  document.getElementById('umodal-rol').value='Monitor';
+  document.getElementById('umodal-rol').value='Monitor/Técnico';
   document.getElementById('umodal-pass-req').textContent='Mínimo 6 caracteres.';
   document.getElementById('umodal-err').textContent='';
   document.getElementById('umodal-bg').style.display='flex';
@@ -522,7 +532,6 @@ function injectUserPanel() {
       '</div>'+
       '<div class="um-row"><label>Rol</label>'+
         '<select id="umodal-rol">'+
-          '<option value="Monitor">Monitor</option>'+
           '<option value="Monitor/Técnico">Monitor/Técnico</option>'+
           '<option value="Técnico">Técnico</option>'+
           '<option value="Admin">Admin</option>'+

@@ -245,3 +245,25 @@ tbody tr:hover td{background:#f9fafb;cursor:pointer}
   .drawer{width:100%;right:-100%}
   .topbar{padding:0 16px}
 }
+/* ── MONITOR DEL DÍA ── */
+.monitor-dia-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--purple-light);border:1.5px solid #ddd6fe;border-radius:12px;padding:12px 18px;margin-bottom:20px}
+.monitor-dia-bar .md-left{display:flex;align-items:center;gap:12px;flex:1;min-width:200px}
+.monitor-dia-bar .md-ico{font-size:22px;line-height:1}
+.monitor-dia-bar .md-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.monitor-dia-bar .md-name{font-size:16px;font-weight:700;color:var(--purple);margin-top:1px}
+.monitor-dia-bar .md-edit{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.monitor-dia-bar .md-edit select{width:auto;min-width:160px}
+
+/* ── CHECKBOX SELECCIÓN ── */
+.tk-check,.tk-allcheck{width:16px;height:16px;cursor:pointer;accent-color:var(--accent);margin:0}
+
+/* ── BARRA DE REASIGNACIÓN MASIVA ── */
+#bulk-bar{position:fixed;bottom:24px;left:50%;z-index:250;display:flex;align-items:center;gap:12px;background:var(--sidebar);color:#fff;padding:12px 18px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;pointer-events:none;transform:translate(-50%,140px);transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .25s;flex-wrap:wrap;max-width:92vw}
+#bulk-bar.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#bulk-bar .bulk-info{font-size:13px;font-weight:500;white-space:nowrap}
+#bulk-bar .bulk-info strong{font-family:var(--mono);font-size:15px}
+#bulk-bar select{width:auto;min-width:170px;background:#fff;color:var(--text)}
+@media(max-width:600px){
+  #bulk-bar{left:12px;right:12px;transform:translateY(140px);max-width:none}
+  #bulk-bar.show{transform:translateY(0)}
+}

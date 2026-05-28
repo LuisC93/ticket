@@ -75,6 +75,9 @@ function renderOpenCards(){
   }).join('');
 }
 
+// ── SELECCIÓN MÚLTIPLE (para reasignación masiva) ──
+var selectedTickets = new Set();
+
 function buildDayGroups(list, readOnly){
   if(!list.length) return '<div class="empty-state" style="padding:40px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:36px;height:36px;opacity:.3"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>No hay incidencias para mostrar</div>';
   var byDate={};
@@ -85,18 +88,25 @@ function buildDayGroups(list, readOnly){
   });
   var dates=Object.keys(byDate).sort(function(a,b){return b.localeCompare(a);});
   var days=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var canReassign = currentUser && (currentUser.rol==='Admin' || currentUser.rol==='Técnico' || currentUser.rol==='Monitor/Técnico');
   return dates.map(function(date){
     var rows=byDate[date];
     var ab=rows.filter(function(t){return t.estado==='Abierto';}).length;
     var ce=rows.filter(function(t){return t.estado==='Cerrado';}).length;
     var label=date;
     try{var p=date.split('-');var d2=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));label=days[d2.getDay()]+' '+p[2]+'/'+p[1]+'/'+p[0];}catch(e){}
-    var ths=['Hora','Monitor','COD','Bloque','Problema','Técnico','Estado',''].map(function(h){
-      return '<th>'+h+'</th>';
-    }).join('');
+    var headCols = (canReassign?['<th style="width:34px;text-align:center"><input type="checkbox" class="tk-allcheck" title="Seleccionar todos" onclick="toggleGroupSel(this)"></th>']:[])
+      .concat(['Hora','Monitor','COD','Bloque','Problema','Técnico','Estado',''].map(function(h){return '<th>'+h+'</th>';}));
+    var ths=headCols.join('');
     var rowsHtml=rows.map(function(t){
       var idx=tickets.indexOf(t);
+      var uid=ticketUID(t);
+      var checked=selectedTickets.has(uid)?' checked':'';
+      var checkCell = canReassign
+        ? '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="tk-check" data-uid="'+uid+'" onclick="toggleTicketSel(this)"'+checked+'></td>'
+        : '';
       return '<tr onclick="openDrawer('+idx+')">'+
+        checkCell+
         '<td style="font-family:var(--mono);font-size:12px;color:var(--text3)">'+fmtHora(t.hora)+'</td>'+
         '<td style="font-weight:600">'+t.monitor+'</td>'+
         '<td style="font-family:var(--mono);font-size:12px;color:var(--accent)">'+t.cod+'</td>'+
@@ -328,19 +338,114 @@ function autoBloqueEdit(cod) {
   }
 }
 // ── FILTRO POR ROL/USUARIO ──
+// Admin y Técnico ven todos los tickets.
+// Monitor/Técnico ve ÚNICAMENTE los tickets donde él es el monitor (sus códigos).
 function getVisibleTickets(panel) {
   if (!currentUser) return tickets;
   var rol = currentUser.rol;
-  // Admin y Técnico ven todo siempre
   if (rol === 'Admin' || rol === 'Técnico') return tickets;
-  // Monitor/Técnico: en panel técnico ven todo, en monitor solo los suyos
-  if (rol === 'Monitor/Técnico') {
-    if (panel === 'tecnico') return tickets;
-    // panel monitor → solo los suyos
-  }
-  // Monitor y Monitor/Técnico en panel monitor → solo sus tickets
+  // Monitor/Técnico → solo los suyos (en cualquier panel)
   var nombre = currentUser.nombre.trim().toLowerCase();
   return tickets.filter(function(t) {
     return String(t.monitor || '').trim().toLowerCase() === nombre;
   });
+}
+// ════════════════════════════════════════════════
+//  MONITOR DEL DÍA  (autocompletar + banner)
+// ════════════════════════════════════════════════
+function renderMonitorDiaBanner() {
+  var el = document.getElementById('monitor-dia-name');
+  if (el) {
+    var n = getMonitorDia();
+    el.textContent = n || '— sin asignar —';
+    el.style.color = n ? 'var(--purple)' : 'var(--text3)';
+  }
+}
+function toggleMonitorDiaEdit(show) {
+  var box = document.getElementById('monitor-dia-edit');
+  var btn = document.getElementById('monitor-dia-btn');
+  if (box) box.style.display = show ? 'flex' : 'none';
+  if (btn) btn.style.display = show ? 'none' : 'inline-flex';
+}
+function guardarMonitorDia() {
+  var sel = document.getElementById('monitor-dia-select');
+  var nombre = sel ? sel.value : '';
+  setMonitorDia(nombre);
+  renderMonitorDiaBanner();
+  toggleMonitorDiaEdit(false);
+  var f = document.getElementById('f-monitor');
+  if (f) f.value = nombre;
+  if (typeof showToast === 'function') showToast('Monitor del día: ' + (nombre || 'sin asignar'), 'ok');
+}
+
+// Llena los <select> de monitores desde la lista central y autocompleta el del día.
+function populateMonitorSelects() {
+  var md = getMonitorDia();
+  fillSelect('f-monitor', MONITORS, { placeholder: 'Seleccionar...' });
+  fillSelect('e-monitor', MONITORS, {});
+  fillSelect('monitor-dia-select', MONITORS, { placeholder: 'Seleccionar...', preselect: md });
+  fillSelect('bulk-monitor', MONITORS, { placeholder: 'Reasignar a...' });
+  var f = document.getElementById('f-monitor');
+  if (f && md) {
+    if (MONITORS.indexOf(md) === -1) { var o = document.createElement('option'); o.text = md; f.add(o); }
+    f.value = md;
+  }
+}
+
+// ════════════════════════════════════════════════
+//  SELECCIÓN MÚLTIPLE + REASIGNACIÓN MASIVA
+// ════════════════════════════════════════════════
+function toggleTicketSel(cb) {
+  var uid = cb.getAttribute('data-uid');
+  if (cb.checked) selectedTickets.add(uid); else selectedTickets.delete(uid);
+  updateBulkBar();
+}
+function toggleGroupSel(cb) {
+  var table = cb.closest('table');
+  if (!table) return;
+  table.querySelectorAll('.tk-check').forEach(function (c) {
+    c.checked = cb.checked;
+    var uid = c.getAttribute('data-uid');
+    if (cb.checked) selectedTickets.add(uid); else selectedTickets.delete(uid);
+  });
+  updateBulkBar();
+}
+function clearSelection() {
+  selectedTickets.clear();
+  document.querySelectorAll('.tk-check, .tk-allcheck').forEach(function (c) { c.checked = false; });
+  updateBulkBar();
+}
+function updateBulkBar() {
+  var bar = document.getElementById('bulk-bar');
+  if (!bar) return;
+  var n = selectedTickets.size;
+  var c = document.getElementById('bulk-count');
+  if (c) c.textContent = n;
+  bar.classList.toggle('show', n > 0);
+}
+async function aplicarReasignacion() {
+  var sel = document.getElementById('bulk-monitor');
+  var nuevo = sel ? sel.value : '';
+  if (!nuevo) { showToast('Elige a quién reasignar.', 'err'); return; }
+  if (!selectedTickets.size) return;
+  var uids = Array.from(selectedTickets);
+  var afectados = tickets.filter(function (t) { return uids.indexOf(ticketUID(t)) > -1; });
+  if (!afectados.length) return;
+  if (!confirm('¿Reasignar ' + afectados.length + ' ticket(s) a "' + nuevo + '"?')) return;
+
+  afectados.forEach(function (t) { t.monitor = nuevo; });
+  saveLocal();
+  renderAll();
+
+  if (CFG.url) {
+    setSyncStatus('syncing');
+    showToast('Reasignando ' + afectados.length + ' ticket(s)...', 'loading');
+    for (var i = 0; i < afectados.length; i++) {
+      var ok = await reassignInSheet(afectados[i]);
+      if (!ok) { pendingQueue.push({ type: 'reassign', ticket: afectados[i], ts: Date.now() }); saveQueue(); }
+    }
+    setSyncStatus('ok');
+  }
+  clearSelection();
+  showToast(afectados.length + ' ticket(s) reasignado(s) a ' + nuevo + ' ✓', 'ok');
 }
