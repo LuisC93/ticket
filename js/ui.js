@@ -521,6 +521,13 @@ function cargarMonitoreoSeleccionado() {
   }
 }
 
+// Cambiar el día que se está viendo (recarga ese día de la hoja del monitor actual)
+function cambiarDiaMon(fechaISO) {
+  if (!monitoreoData || !monitoreoData.monitorApp) return;
+  monSelected.clear();
+  loadMonitoreo(monitoreoData.monitorApp, fechaISO);
+}
+
 function uniqueVals(rows, key) {
   var s = {};
   rows.forEach(function(r){ if (r[key]) s[r[key]] = 1; });
@@ -545,11 +552,23 @@ function renderMonitoreo() {
   var sinCol = !monitoreoData.dateCol;
   if (head) {
     if (sinCol) {
-      head.innerHTML = '<span style="color:var(--danger);font-weight:600">⚠ Hoy no tiene columna en la hoja <strong>' +
-        monitoreoData.sheet + '</strong>. Agrégala en Drive (fila 3) para poder marcar estados.</span>';
+      head.innerHTML = '<span style="color:var(--danger);font-weight:600">⚠ La hoja <strong>' +
+        monitoreoData.sheet + '</strong> no tiene columnas de fecha. Revisa la fila 3 en Drive.</span>';
     } else {
-      head.innerHTML = 'Hoja <strong>' + monitoreoData.sheet + '</strong> · columna del día <strong>' +
-        monitoreoData.dateCol + '</strong> · ' + rows.length + ' centros';
+      // Selector de fecha (días disponibles ≤ hoy)
+      var avail = monitoreoData.availableDates || [];
+      var selHtml = '';
+      if (avail.length) {
+        selHtml = ' · <select id="mon-date-select" onchange="cambiarDiaMon(this.value)" ' +
+          'style="width:auto;display:inline-block;height:28px;padding:2px 8px;font-size:12px;border:1.5px solid var(--border2);border-radius:7px;vertical-align:middle">' +
+          avail.map(function(a){
+            return '<option value="' + a.iso + '"' + (a.iso === monitoreoData.dateISO ? ' selected' : '') + '>' + a.label + '</option>';
+          }).join('') + '</select>';
+      }
+      var aviso = monitoreoData.isToday ? '' :
+        ' <span style="color:var(--purple);font-weight:600">· mostrando último día disponible</span>';
+      head.innerHTML = 'Hoja <strong>' + monitoreoData.sheet + '</strong> · día' + selHtml +
+        ' · ' + rows.length + ' centros' + aviso;
     }
   }
 

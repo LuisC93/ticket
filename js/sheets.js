@@ -191,7 +191,7 @@ var monQueue = JSON.parse(localStorage.getItem('inc_mon_queue') || '[]');
 function saveMonQueue() { localStorage.setItem('inc_mon_queue', JSON.stringify(monQueue)); }
 
 // ── CARGAR centros + estado de hoy de un monitor ──
-async function loadMonitoreo(monitorApp) {
+async function loadMonitoreo(monitorApp, fechaISO) {
   if (!monitorApp) return;
   var sheet = getSheetForMonitor(monitorApp);
   setSyncStatus('syncing');
@@ -199,23 +199,25 @@ async function loadMonitoreo(monitorApp) {
   var d = await sheetFetchRead({
     action: 'getMonitoreo',
     sheet:  sheet,
-    fecha:  todayISO()
+    fecha:  fechaISO || todayISO()
   });
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     monitoreoData = {
-      monitorApp: monitorApp,
-      sheet:      sheet,
-      dateCol:    d.dateCol || '',
-      rows:       d.rows,
-      ts:         Date.now()
+      monitorApp:     monitorApp,
+      sheet:          sheet,
+      dateCol:        d.dateCol || '',
+      dateISO:        d.dateISO || todayISO(),
+      isToday:        d.isToday !== false,
+      availableDates: d.availableDates || [],
+      rows:           d.rows,
+      ts:             Date.now()
     };
     saveMonitoreoLocal();
     setSyncStatus('ok');
     if (typeof renderMonitoreo === 'function') renderMonitoreo();
-    showToast(d.rows.length + ' centros cargados ✓', 'ok');
+    showToast(d.rows.length + ' centros · ' + (d.dateCol || '') + (d.isToday === false ? ' (último día)' : '') + ' ✓', 'ok');
   } else {
     setSyncStatus('err');
-    // Si hay cache del mismo monitor, lo dejamos visible
     if (typeof renderMonitoreo === 'function') renderMonitoreo();
     showToast('No se pudo cargar la hoja "' + sheet + '" ✗', 'err');
   }
@@ -224,18 +226,19 @@ async function loadMonitoreo(monitorApp) {
 // ── ESCRIBIR estado del día de UN centro ──
 async function setEstadoMonitoreo(cod, estado) {
   if (!monitoreoData) return false;
+  var fecha = monitoreoData.dateISO || todayISO();
   var ok = false;
   if (CFG.url) {
     ok = await sheetFetchWrite({
       action: 'setMonitoreo',
       sheet:  monitoreoData.sheet,
       cod:    cod,
-      fecha:  todayISO(),
+      fecha:  fecha,
       estado: estado
     });
   }
   if (!ok) {
-    monQueue.push({ sheet: monitoreoData.sheet, cod: cod, fecha: todayISO(), estado: estado, ts: Date.now(), attempts: 0 });
+    monQueue.push({ sheet: monitoreoData.sheet, cod: cod, fecha: fecha, estado: estado, ts: Date.now(), attempts: 0 });
     saveMonQueue();
   }
   return ok;
@@ -245,18 +248,19 @@ async function setEstadoMonitoreo(cod, estado) {
 // Mucho más rápido: 1 request escribe toda la columna en el servidor.
 async function setEstadoMonitoreoBatch(cods, estado) {
   if (!monitoreoData || !cods || !cods.length) return false;
+  var fecha = monitoreoData.dateISO || todayISO();
   var ok = false;
   if (CFG.url) {
     ok = await sheetFetchWrite({
       action: 'setMonitoreoBatch',
       sheet:  monitoreoData.sheet,
       cods:   cods,
-      fecha:  todayISO(),
+      fecha:  fecha,
       estado: estado
     });
   }
   if (!ok) {
-    monQueue.push({ batch: true, sheet: monitoreoData.sheet, cods: cods, fecha: todayISO(), estado: estado, ts: Date.now(), attempts: 0 });
+    monQueue.push({ batch: true, sheet: monitoreoData.sheet, cods: cods, fecha: fecha, estado: estado, ts: Date.now(), attempts: 0 });
     saveMonQueue();
   }
   return ok;
@@ -384,6 +388,29 @@ function autoSync() {
 
 // Cada 1 minuto
 setInterval(autoSync, 60 * 1000);
+
+// ── CARGA INICIAL AL INICIAR SESIÓN ──
+// Trae TODO de una vez (tickets + monitoreo), en orden para no chocar con el
+// límite de "una petición a la vez" de Apps Script. El usuario no toca nada.
+var _preloadRunning = false;
+async function preloadAtLogin() {
+  if (_preloadRunning || !CFG.url || !currentUser) return;
+  _preloadRunning = true;
+  try {
+    // 1) Tickets (SLA)
+    if (typeof loadFromSheet === 'function') await loadFromSheet();
+    // 2) Monitoreo del propio monitor (dispara también el arrastre del día)
+    if (currentUser.rol === 'Monitor/Técnico' && typeof loadMonitoreo === 'function') {
+      await loadMonitoreo(currentUser.nombre);
+    }
+    // 3) Reintenta cualquier cambio que quedó pendiente sin conexión
+    if (typeof flushQueue === 'function')    flushQueue();
+    if (typeof flushMonQueue === 'function') flushMonQueue();
+  } catch (e) {
+    console.warn('preloadAtLogin error:', e);
+  }
+  _preloadRunning = false;
+}
 
 async function crearTicket() {
   var mon  = document.getElementById('f-monitor').value || getMonitorDia();
