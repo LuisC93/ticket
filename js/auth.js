@@ -26,9 +26,6 @@ function normalizeUsers(users) {
   });
 }
 
-var AUTH_DEFAULT_USERS = [
-  { id:1, nombre:'Administrador', username:'admin', password:'admin123', rol:'Admin' }
-];
 
 var currentUser  = null;
 var _usersCache  = null;
