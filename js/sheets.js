@@ -241,6 +241,27 @@ async function setEstadoMonitoreo(cod, estado) {
   return ok;
 }
 
+// ── ESCRIBIR estado del día de VARIOS centros en UNA sola petición ──
+// Mucho más rápido: 1 request escribe toda la columna en el servidor.
+async function setEstadoMonitoreoBatch(cods, estado) {
+  if (!monitoreoData || !cods || !cods.length) return false;
+  var ok = false;
+  if (CFG.url) {
+    ok = await sheetFetchWrite({
+      action: 'setMonitoreoBatch',
+      sheet:  monitoreoData.sheet,
+      cods:   cods,
+      fecha:  todayISO(),
+      estado: estado
+    });
+  }
+  if (!ok) {
+    monQueue.push({ batch: true, sheet: monitoreoData.sheet, cods: cods, fecha: todayISO(), estado: estado, ts: Date.now(), attempts: 0 });
+    saveMonQueue();
+  }
+  return ok;
+}
+
 // ── FLUSH de la cola de monitoreo ──
 var _monFlushRunning = false;
 async function flushMonQueue() {
@@ -251,9 +272,12 @@ async function flushMonQueue() {
     var it = monQueue[i];
     it.attempts = (it.attempts || 0) + 1;
     if (it.attempts > 3) { sent.push(i); continue; }
-    var ok = await sheetFetchWrite({
-      action: 'setMonitoreo', sheet: it.sheet, cod: it.cod, fecha: it.fecha, estado: it.estado
-    });
+    var ok;
+    if (it.batch) {
+      ok = await sheetFetchWrite({ action: 'setMonitoreoBatch', sheet: it.sheet, cods: it.cods, fecha: it.fecha, estado: it.estado });
+    } else {
+      ok = await sheetFetchWrite({ action: 'setMonitoreo', sheet: it.sheet, cod: it.cod, fecha: it.fecha, estado: it.estado });
+    }
     if (ok) sent.push(i);
   }
   if (sent.length) {
@@ -435,12 +459,13 @@ async function updateEstadoMonitor(t, cerrar) {
   if (!CFG.url || !t.cod || !t.monitor) return;
   try {
     await sheetFetchWrite({
-      action:  'updateEstado',
-      cod:     t.cod,
-      monitor: t.monitor,
-      tipoInc: t.tipoInc || t.tipo || '',
-      fecha:   isoFromTicket(t.fecha),
-      cerrar:  cerrar ? 'true' : 'false'
+      action:   'updateEstado',
+      cod:      t.cod,
+      monitor:  t.monitor,
+      problema: t.tipo || '',        // ← el "Problema" del ticket (lo que se mapea)
+      tipoInc:  t.tipoInc || '',     // se manda también por compatibilidad
+      fecha:    isoFromTicket(t.fecha),
+      cerrar:   cerrar ? 'true' : 'false'
     });
   } catch(e) {
     console.warn('updateEstadoMonitor error:', e);

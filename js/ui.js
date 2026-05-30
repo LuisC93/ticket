@@ -180,6 +180,12 @@ function renderTecnico(){
 }
 
 // ── FILTERS ──
+function setTicketMonitorFilter(val){
+  ticketMonitorFilter = val || '';
+  var a = document.getElementById('ticket-mon-filter'); if (a) a.value = ticketMonitorFilter;
+  var b = document.getElementById('tec-mon-filter');    if (b) b.value = ticketMonitorFilter;
+  renderAll();
+}
 function setDayFilter(f,btn){dayFilter=f;document.querySelectorAll('#day-filters .fpill').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderOpenCards();}
 function setTecDayFilter(f,btn){tecDayFilter=f;document.querySelectorAll('#tec-day-filters .fpill').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderTecnico();}
 function setFilter(f,btn){activeFilter=f;document.querySelectorAll('#tec-historial-body').length;document.querySelectorAll('.fpill').forEach(function(b){if(b.closest('#tec-day-filters')) return;b.classList.remove('active');});btn.classList.add('active');renderTecnico();}
@@ -344,13 +350,21 @@ function autoBloqueEdit(cod) {
   }
 }
 // ── FILTRO POR ROL/USUARIO ──
-// Admin y Técnico ven todos los tickets.
-// Monitor/Técnico ve ÚNICAMENTE los tickets donde él es el monitor (sus códigos).
+// Admin y Técnico ven todos los tickets, pero pueden filtrar por un monitor.
+// Monitor/Técnico ve ÚNICAMENTE los suyos (sus códigos), sin importar el filtro.
 function getVisibleTickets(panel) {
   if (!currentUser) return tickets;
   var rol = currentUser.rol;
-  if (rol === 'Admin' || rol === 'Técnico') return tickets;
-  // Monitor/Técnico → solo los suyos (en cualquier panel)
+  if (rol === 'Admin' || rol === 'Técnico') {
+    if (ticketMonitorFilter) {
+      var f = ticketMonitorFilter.trim().toLowerCase();
+      return tickets.filter(function(t) {
+        return String(t.monitor || '').trim().toLowerCase() === f;
+      });
+    }
+    return tickets;
+  }
+  // Monitor/Técnico → solo los suyos
   var nombre = currentUser.nombre.trim().toLowerCase();
   return tickets.filter(function(t) {
     return String(t.monitor || '').trim().toLowerCase() === nombre;
@@ -391,6 +405,20 @@ function populateMonitorSelects() {
   fillSelect('e-monitor', MONITORS, {});
   fillSelect('monitor-dia-select', MONITORS, { placeholder: 'Seleccionar...', preselect: md });
   fillSelect('bulk-monitor', MONITORS, { placeholder: 'Reasignar a...' });
+
+  // Filtro de tickets por monitor — solo visible para Admin/Técnico
+  var verTodos = currentUser && (currentUser.rol === 'Admin' || currentUser.rol === 'Técnico');
+  ['ticket-mon-filter', 'tec-mon-filter'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.innerHTML = '<option value="">Todos los monitores</option>' +
+        MONITORS.map(function(m){ return '<option>' + m + '</option>'; }).join('');
+      el.value = ticketMonitorFilter || '';
+    }
+    var wrap = document.getElementById(id + '-wrap');
+    if (wrap) wrap.style.display = verTodos ? 'flex' : 'none';
+  });
+
   var f = document.getElementById('f-monitor');
   if (f && md) {
     if (MONITORS.indexOf(md) === -1) { var o = document.createElement('option'); o.text = md; f.add(o); }
@@ -676,12 +704,14 @@ async function aplicarEstadoMasivo() {
 
   setSyncStatus('syncing');
   showToast('Guardando ' + cods.length + ' estado(s)...', 'loading');
-  var fails = 0;
-  for (var i = 0; i < cods.length; i++) {
-    var ok = await setEstadoMonitoreo(cods[i], estado);
-    if (!ok) fails++;
+  // Una sola petición por lote (grupos de 150 para no exceder el largo de la URL).
+  var CHUNK = 150, fails = 0;
+  for (var i = 0; i < cods.length; i += CHUNK) {
+    var grupo = cods.slice(i, i + CHUNK);
+    var ok = await setEstadoMonitoreoBatch(grupo, estado);
+    if (!ok) fails += grupo.length;
   }
   setSyncStatus(fails ? 'err' : 'ok');
   clearMonSelection();
-  showToast(fails ? (cods.length-fails)+' guardados, '+fails+' pendientes' : cods.length + ' centros marcados ✓', fails ? 'warn' : 'ok');
+  showToast(fails ? ((cods.length-fails)+' guardados, '+fails+' pendientes') : (cods.length + ' centros marcados ✓'), fails ? 'warn' : 'ok');
 }

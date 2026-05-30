@@ -14,6 +14,7 @@ var CFG_SAVED = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
 var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED, { url: CFG_DEFAULT.url });
 var tickets = JSON.parse(localStorage.getItem('inc_data') || '[]');
 var activeFilter = 'all', monFilter = 'all', dayFilter = 'today', tecDayFilter = 'today';
+var ticketMonitorFilter = ''; // filtro de tickets por monitor (solo Admin/Técnico; '' = todos)
 var activeIdx = null;
 
 // ── MAPA BLOQUES (código → bloque) ──
