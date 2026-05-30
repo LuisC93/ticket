@@ -512,9 +512,15 @@ function renderMonitoreo() {
   }
 
   var rows = monitoreoData.rows;
+  var sinCol = !monitoreoData.dateCol;
   if (head) {
-    head.innerHTML = 'Hoja <strong>' + monitoreoData.sheet + '</strong> · columna del día <strong>' +
-      (monitoreoData.dateCol || '—') + '</strong> · ' + rows.length + ' centros';
+    if (sinCol) {
+      head.innerHTML = '<span style="color:var(--danger);font-weight:600">⚠ Hoy no tiene columna en la hoja <strong>' +
+        monitoreoData.sheet + '</strong>. Agrégala en Drive (fila 3) para poder marcar estados.</span>';
+    } else {
+      head.innerHTML = 'Hoja <strong>' + monitoreoData.sheet + '</strong> · columna del día <strong>' +
+        monitoreoData.dateCol + '</strong> · ' + rows.length + ' centros';
+    }
   }
 
   // Aplicar filtros
@@ -556,7 +562,7 @@ function renderMonitoreo() {
       '<td style="color:var(--text2)">'+(r.distrito||'')+'</td>'+
       '<td>'+(r.red||'')+'</td>'+
       '<td>'+(r.bloque||'')+'</td>'+
-      '<td><select class="mon-estado-sel" data-cod="'+r.cod+'" style="'+styleSel+'" onchange="cambiarEstadoMon(this)">'+optionsHtml(r.estadoHoy||'')+'</select></td>'+
+      '<td><select class="mon-estado-sel" data-cod="'+r.cod+'" style="'+styleSel+'"'+(sinCol?' disabled':'')+' onchange="cambiarEstadoMon(this)">'+optionsHtml(r.estadoHoy||'')+'</select></td>'+
     '</tr>';
   }).join('');
 
@@ -653,6 +659,7 @@ function updateMonBulkBar() {
 
 // ── Aplicar estado a varios centros ──
 async function aplicarEstadoMasivo() {
+  if (monitoreoData && !monitoreoData.dateCol) { showToast('Hoy no tiene columna en la hoja. Agrégala primero.', 'err'); return; }
   var sel = document.getElementById('mon-bulk-estado');
   var estado = sel ? sel.value : '';
   if (!estado) { showToast('Elige un estado.', 'err'); return; }
