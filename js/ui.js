@@ -499,8 +499,10 @@ function initMonitoreoPanel() {
     // Carga su propia hoja, sin selector
     if (wrap) wrap.style.display = 'none';
     var ya = monitoreoData && monitoreoData.monitorApp === currentUser.nombre;
-    if (!ya && typeof loadMonitoreo === 'function') loadMonitoreo(currentUser.nombre);
-    else renderMonitoreo();
+    if (ya) renderMonitoreo();   // muestra al instante lo que ya esté en caché
+    // Refresca desde el servidor si no hay caché o si tiene más de 60s (evita data vieja)
+    var fresco = ya && (Date.now() - (monitoreoData.ts || 0) < 60000);
+    if (!fresco && typeof loadMonitoreo === 'function') loadMonitoreo(currentUser.nombre);
   } else {
     // Admin / Técnico: elige qué monitor ver
     if (wrap) wrap.style.display = 'flex';

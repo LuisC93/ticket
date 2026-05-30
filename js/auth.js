@@ -163,6 +163,12 @@ function showMainApp() {
     if(typeof loadFromSheet==='function') loadFromSheet();
   }, 1000);
 
+  // Precargar el monitoreo del propio monitor (para que su panel abra al instante
+  // y el arrastre del día se dispare apenas inicia sesión).
+  if (currentUser && currentUser.rol === 'Monitor/Técnico' && typeof loadMonitoreo === 'function') {
+    setTimeout(function(){ loadMonitoreo(currentUser.nombre); }, 1800);
+  }
+
   // Mostrar aviso de configuración si falta JSONBin
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
     setTimeout(function(){
@@ -486,7 +492,7 @@ function injectLoginScreen() {
       '</div>'+
       '<div id="auth-err"></div>'+
       '<button id="auth-login-btn" onclick="doLogin()">Ingresar</button>'+
-      '<span class="auth-hint"></span>'+
+      '<span class="auth-hint">Credenciales por defecto: admin / admin123</span>'+
     '</div>';
   document.body.appendChild(el);
 
