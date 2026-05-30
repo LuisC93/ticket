@@ -486,7 +486,7 @@ function injectLoginScreen() {
       '</div>'+
       '<div id="auth-err"></div>'+
       '<button id="auth-login-btn" onclick="doLogin()">Ingresar</button>'+
-      '<span class="auth-hint">Credenciales por defecto: admin / admin123</span>'+
+      '<span class="auth-hint"></span>'+
     '</div>';
   document.body.appendChild(el);
 

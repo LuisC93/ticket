@@ -182,6 +182,88 @@ async function reassignInSheet(t) {
   });
 }
 
+// ════════════════════════════════════════════════
+//  MONITOREO RUTINARIO
+// ════════════════════════════════════════════════
+
+// Cola offline específica de monitoreo
+var monQueue = JSON.parse(localStorage.getItem('inc_mon_queue') || '[]');
+function saveMonQueue() { localStorage.setItem('inc_mon_queue', JSON.stringify(monQueue)); }
+
+// ── CARGAR centros + estado de hoy de un monitor ──
+async function loadMonitoreo(monitorApp) {
+  if (!monitorApp) return;
+  var sheet = getSheetForMonitor(monitorApp);
+  setSyncStatus('syncing');
+  showToast('Cargando centros de ' + monitorApp + '...', 'loading');
+  var d = await sheetFetchRead({
+    action: 'getMonitoreo',
+    sheet:  sheet,
+    fecha:  todayISO()
+  });
+  if (d && d.status === 'ok' && Array.isArray(d.rows)) {
+    monitoreoData = {
+      monitorApp: monitorApp,
+      sheet:      sheet,
+      dateCol:    d.dateCol || '',
+      rows:       d.rows,
+      ts:         Date.now()
+    };
+    saveMonitoreoLocal();
+    setSyncStatus('ok');
+    if (typeof renderMonitoreo === 'function') renderMonitoreo();
+    showToast(d.rows.length + ' centros cargados ✓', 'ok');
+  } else {
+    setSyncStatus('err');
+    // Si hay cache del mismo monitor, lo dejamos visible
+    if (typeof renderMonitoreo === 'function') renderMonitoreo();
+    showToast('No se pudo cargar la hoja "' + sheet + '" ✗', 'err');
+  }
+}
+
+// ── ESCRIBIR estado del día de UN centro ──
+async function setEstadoMonitoreo(cod, estado) {
+  if (!monitoreoData) return false;
+  var ok = false;
+  if (CFG.url) {
+    ok = await sheetFetchWrite({
+      action: 'setMonitoreo',
+      sheet:  monitoreoData.sheet,
+      cod:    cod,
+      fecha:  todayISO(),
+      estado: estado
+    });
+  }
+  if (!ok) {
+    monQueue.push({ sheet: monitoreoData.sheet, cod: cod, fecha: todayISO(), estado: estado, ts: Date.now(), attempts: 0 });
+    saveMonQueue();
+  }
+  return ok;
+}
+
+// ── FLUSH de la cola de monitoreo ──
+var _monFlushRunning = false;
+async function flushMonQueue() {
+  if (_monFlushRunning || !monQueue.length || !CFG.url) return;
+  _monFlushRunning = true;
+  var sent = [];
+  for (var i = 0; i < monQueue.length; i++) {
+    var it = monQueue[i];
+    it.attempts = (it.attempts || 0) + 1;
+    if (it.attempts > 3) { sent.push(i); continue; }
+    var ok = await sheetFetchWrite({
+      action: 'setMonitoreo', sheet: it.sheet, cod: it.cod, fecha: it.fecha, estado: it.estado
+    });
+    if (ok) sent.push(i);
+  }
+  if (sent.length) {
+    monQueue = monQueue.filter(function(_, i){ return sent.indexOf(i) === -1; });
+    saveMonQueue();
+    if (monQueue.length === 0) showToast('Monitoreo sincronizado ✓', 'ok');
+  }
+  _monFlushRunning = false;
+}
+
 async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
   setSyncStatus('syncing');
@@ -262,6 +344,7 @@ async function flushQueue() {
 window.addEventListener('online', function() {
   showToast('Conexión restaurada · Sincronizando...', 'warn');
   setTimeout(flushQueue, 1500);
+  setTimeout(flushMonQueue, 2000);
 });
 window.addEventListener('offline', function() {
   setSyncStatus('err');

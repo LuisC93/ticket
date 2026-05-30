@@ -225,8 +225,14 @@ function switchTab(n,btn){
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
   btn.classList.add('active');
   document.getElementById('panel-'+n).classList.add('active');
-  var titles={monitor:'Tickets del Día',nuevo:'Nueva Incidencia',tecnico:'Panel Técnico'};
+  var titles={monitor:'Tickets del Día',nuevo:'Nueva Incidencia',tecnico:'Panel Técnico',monitoreo:'Monitoreo Rutinario'};
   document.getElementById('page-title').textContent=titles[n]||'';
+  if (n === 'monitoreo' && typeof initMonitoreoPanel === 'function') {
+    if (typeof clearSelection === 'function') clearSelection();
+    initMonitoreoPanel();
+  } else if (typeof clearMonSelection === 'function') {
+    clearMonSelection();
+  }
 }
 
 function showAlert(showId,hideId,msg){
@@ -448,4 +454,227 @@ async function aplicarReasignacion() {
   }
   clearSelection();
   showToast(afectados.length + ' ticket(s) reasignado(s) a ' + nuevo + ' ✓', 'ok');
+}
+
+// ════════════════════════════════════════════════
+//  PANEL MONITOREO RUTINARIO
+// ════════════════════════════════════════════════
+var monSelected = new Set();        // cods seleccionados para acción masiva
+var monFilters = { q:'', depto:'', distrito:'', red:'', bloque:'', estado:'' };
+
+// Abre el panel: decide qué hoja cargar según el rol.
+function initMonitoreoPanel() {
+  var sel = document.getElementById('mon-monitor-select');
+  var wrap = document.getElementById('mon-monitor-wrap');
+  if (!currentUser) return;
+  if (currentUser.rol === 'Monitor/Técnico') {
+    // Carga su propia hoja, sin selector
+    if (wrap) wrap.style.display = 'none';
+    var ya = monitoreoData && monitoreoData.monitorApp === currentUser.nombre;
+    if (!ya && typeof loadMonitoreo === 'function') loadMonitoreo(currentUser.nombre);
+    else renderMonitoreo();
+  } else {
+    // Admin / Técnico: elige qué monitor ver
+    if (wrap) wrap.style.display = 'flex';
+    if (sel && !sel.options.length) {
+      sel.innerHTML = '<option value="">Elegir monitor...</option>' +
+        MONITORS.map(function(m){ return '<option>'+m+'</option>'; }).join('');
+    }
+    renderMonitoreo();
+  }
+}
+function cargarMonitoreoSeleccionado() {
+  var sel = document.getElementById('mon-monitor-select');
+  if (sel && sel.value && typeof loadMonitoreo === 'function') {
+    monSelected.clear();
+    loadMonitoreo(sel.value);
+  }
+}
+
+function uniqueVals(rows, key) {
+  var s = {};
+  rows.forEach(function(r){ if (r[key]) s[r[key]] = 1; });
+  return Object.keys(s).sort();
+}
+
+function renderMonitoreo() {
+  var head = document.getElementById('mon-head-info');
+  var body = document.getElementById('mon-body');
+  if (!body) return;
+
+  if (!monitoreoData || !monitoreoData.rows || !monitoreoData.rows.length) {
+    if (head) head.textContent = '';
+    body.innerHTML = '<div class="empty-state" style="padding:50px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:40px;height:40px;opacity:.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Sin centros cargados. ' +
+      (currentUser && currentUser.rol!=='Monitor/Técnico' ? 'Elige un monitor arriba.' : 'Pulsa ↻ para sincronizar tu hoja.') + '</div>';
+    actualizarFiltrosMon();
+    updateMonBulkBar();
+    return;
+  }
+
+  var rows = monitoreoData.rows;
+  if (head) {
+    head.innerHTML = 'Hoja <strong>' + monitoreoData.sheet + '</strong> · columna del día <strong>' +
+      (monitoreoData.dateCol || '—') + '</strong> · ' + rows.length + ' centros';
+  }
+
+  // Aplicar filtros
+  var q = monFilters.q.toLowerCase();
+  var list = rows.filter(function(r){
+    if (monFilters.depto    && r.departamento !== monFilters.depto) return false;
+    if (monFilters.distrito && r.distrito     !== monFilters.distrito) return false;
+    if (monFilters.red      && r.red          !== monFilters.red) return false;
+    if (monFilters.bloque   && r.bloque       !== monFilters.bloque) return false;
+    if (monFilters.estado   && (r.estadoHoy||'') !== monFilters.estado) return false;
+    if (q) {
+      var hay = [r.cod, r.centro, r.departamento, r.distrito, r.red, r.bloque]
+        .some(function(v){ return String(v||'').toLowerCase().indexOf(q) > -1; });
+      if (!hay) return false;
+    }
+    return true;
+  });
+
+  var cnt = document.getElementById('mon-count');
+  if (cnt) cnt.textContent = list.length;
+
+  var optionsHtml = function(sel){
+    var opts = '<option value="">—</option>';
+    ESTADOS_MONITOREO.forEach(function(e){
+      opts += '<option value="'+e.label+'"'+(e.label===sel?' selected':'')+'>'+e.label+'</option>';
+    });
+    return opts;
+  };
+
+  var rowsHtml = list.map(function(r){
+    var checked = monSelected.has(r.cod) ? ' checked' : '';
+    var c = estadoMonitoreoColor(r.estadoHoy);
+    var styleSel = r.estadoHoy ? ('background:'+c.bg+';color:'+c.fg+';border-color:'+c.bg) : '';
+    return '<tr>'+
+      '<td style="text-align:center"><input type="checkbox" class="mon-check" data-cod="'+r.cod+'" onclick="toggleMonSel(this)"'+checked+'></td>'+
+      '<td style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600">'+r.cod+'</td>'+
+      '<td style="font-weight:600;max-width:280px">'+(r.centro||'')+'</td>'+
+      '<td style="color:var(--text2)">'+(r.departamento||'')+'</td>'+
+      '<td style="color:var(--text2)">'+(r.distrito||'')+'</td>'+
+      '<td>'+(r.red||'')+'</td>'+
+      '<td>'+(r.bloque||'')+'</td>'+
+      '<td><select class="mon-estado-sel" data-cod="'+r.cod+'" style="'+styleSel+'" onchange="cambiarEstadoMon(this)">'+optionsHtml(r.estadoHoy||'')+'</select></td>'+
+    '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div style="overflow-x:auto"><table>'+
+      '<thead><tr>'+
+        '<th style="width:34px;text-align:center"><input type="checkbox" id="mon-allcheck" onclick="toggleMonAll(this)"></th>'+
+        '<th>COD</th><th>Centro Escolar</th><th>Departamento</th><th>Distrito</th><th>Red</th><th>Bloque</th><th>Estado de hoy</th>'+
+      '</tr></thead>'+
+      '<tbody>'+(rowsHtml||'<tr><td colspan="8"><div class="empty-state">Sin resultados con esos filtros</div></td></tr>')+'</tbody>'+
+    '</table></div>';
+
+  actualizarFiltrosMon();
+  updateMonBulkBar();
+}
+
+// Rellena los <select> de filtros con los valores disponibles
+function actualizarFiltrosMon() {
+  var rows = (monitoreoData && monitoreoData.rows) || [];
+  function fill(id, key) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var cur = el.value;
+    var vals = uniqueVals(rows, key);
+    var label = id.replace('mon-f-','');
+    el.innerHTML = '<option value="">Todos</option>' + vals.map(function(v){ return '<option>'+v+'</option>'; }).join('');
+    el.value = cur;
+  }
+  fill('mon-f-depto','departamento');
+  fill('mon-f-distrito','distrito');
+  fill('mon-f-red','red');
+  fill('mon-f-bloque','bloque');
+  var est = document.getElementById('mon-f-estado');
+  if (est && !est.dataset.filled) {
+    est.innerHTML = '<option value="">Todos</option>' + ESTADOS_MONITOREO.map(function(e){ return '<option>'+e.label+'</option>'; }).join('');
+    est.dataset.filled = '1';
+  }
+}
+
+function setMonFilter(key, val) { monFilters[key] = val; renderMonitoreo(); }
+function limpiarFiltrosMon() {
+  monFilters = { q:'', depto:'', distrito:'', red:'', bloque:'', estado:'' };
+  ['mon-search','mon-f-depto','mon-f-distrito','mon-f-red','mon-f-bloque','mon-f-estado'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value='';
+  });
+  renderMonitoreo();
+}
+
+// ── Cambiar estado de UN centro ──
+async function cambiarEstadoMon(sel) {
+  var cod = sel.getAttribute('data-cod');
+  var estado = sel.value;
+  var c = estadoMonitoreoColor(estado);
+  sel.style.background = estado ? c.bg : '';
+  sel.style.color = estado ? c.fg : '';
+  sel.style.borderColor = estado ? c.bg : '';
+  // Actualiza cache
+  if (monitoreoData) {
+    monitoreoData.rows.forEach(function(r){ if (r.cod === cod) r.estadoHoy = estado; });
+    saveMonitoreoLocal();
+  }
+  var ok = await setEstadoMonitoreo(cod, estado);
+  showToast(ok ? 'Estado guardado ✓' : 'Sin conexión · guardado pendiente', ok ? 'ok' : 'warn');
+}
+
+// ── Selección múltiple ──
+function toggleMonSel(cb) {
+  var cod = cb.getAttribute('data-cod');
+  if (cb.checked) monSelected.add(cod); else monSelected.delete(cod);
+  updateMonBulkBar();
+}
+function toggleMonAll(cb) {
+  document.querySelectorAll('.mon-check').forEach(function(c){
+    c.checked = cb.checked;
+    var cod = c.getAttribute('data-cod');
+    if (cb.checked) monSelected.add(cod); else monSelected.delete(cod);
+  });
+  updateMonBulkBar();
+}
+function clearMonSelection() {
+  monSelected.clear();
+  document.querySelectorAll('.mon-check').forEach(function(c){ c.checked=false; });
+  var all = document.getElementById('mon-allcheck'); if (all) all.checked=false;
+  updateMonBulkBar();
+}
+function updateMonBulkBar() {
+  var bar = document.getElementById('mon-bulk-bar');
+  if (!bar) return;
+  var n = monSelected.size;
+  var c = document.getElementById('mon-bulk-count');
+  if (c) c.textContent = n;
+  bar.classList.toggle('show', n > 0);
+}
+
+// ── Aplicar estado a varios centros ──
+async function aplicarEstadoMasivo() {
+  var sel = document.getElementById('mon-bulk-estado');
+  var estado = sel ? sel.value : '';
+  if (!estado) { showToast('Elige un estado.', 'err'); return; }
+  if (!monSelected.size) return;
+  var cods = Array.from(monSelected);
+  if (!confirm('¿Marcar ' + cods.length + ' centro(s) como "' + estado + '" para hoy?')) return;
+
+  // Actualiza cache + UI
+  if (monitoreoData) {
+    monitoreoData.rows.forEach(function(r){ if (cods.indexOf(r.cod) > -1) r.estadoHoy = estado; });
+    saveMonitoreoLocal();
+  }
+  renderMonitoreo();
+
+  setSyncStatus('syncing');
+  showToast('Guardando ' + cods.length + ' estado(s)...', 'loading');
+  var fails = 0;
+  for (var i = 0; i < cods.length; i++) {
+    var ok = await setEstadoMonitoreo(cods[i], estado);
+    if (!ok) fails++;
+  }
+  setSyncStatus(fails ? 'err' : 'ok');
+  clearMonSelection();
+  showToast(fails ? (cods.length-fails)+' guardados, '+fails+' pendientes' : cods.length + ' centros marcados ✓', fails ? 'warn' : 'ok');
 }

@@ -23,6 +23,60 @@ var bloquesMap = JSON.parse(localStorage.getItem('inc_bloques') || '{}');
 // Se usa para: formulario nuevo, modal editar, monitor del día y reasignación masiva.
 var MONITORS = ['Jose Luis','Boris','Jimmy','Marta','Luis Yanes','Sandor','Jose Cruz','Jonatan','Linda'];
 
+// ── MAPA MONITOR → PESTAÑA DE DRIVE ──
+// La hoja (pestaña) de cada monitor en el Google Sheet de monitoreo.
+// Por defecto es el mismo nombre; aquí se corrigen los que difieren.
+// ⚠️ EDITA AQUÍ si alguna pestaña se llama distinto al nombre del monitor.
+var MONITOR_SHEET_MAP = {
+  'Jose Luis':  'Jose Luis',
+  'Boris':      'Boris',
+  'Jimmy':      'Jimy',          // la pestaña se llama "Jimy"
+  'Marta':      'Marta',
+  'Luis Yanes': 'Luis Yanes',
+  'Sandor':     'Sandor',
+  'Jose Cruz':  'Jose Cruz',
+  'Jonatan':    'Jonatan',
+  'Linda':      'Linda Aviles'   // la pestaña se llama "Linda Aviles"
+};
+function getSheetForMonitor(nombre) {
+  return MONITOR_SHEET_MAP[nombre] || nombre;
+}
+
+// ── ESTADOS DE MONITOREO (desplegable con colores) ──
+// label = texto exacto que se escribe en la hoja. bg/fg = color de la "celda".
+// ⚠️ EDITA AQUÍ para agregar, quitar o renombrar estados.
+var ESTADOS_MONITOREO = [
+  { label: 'Navegación estable',            bg:'#34a853', fg:'#ffffff' },
+  { label: 'Corte F.O externa',             bg:'#ea4335', fg:'#ffffff' },
+  { label: 'Problema de ancho de banda',    bg:'#f4a3a0', fg:'#5c0a06' },
+  { label: 'Saturación',                    bg:'#fbe08a', fg:'#5c4708' },
+  { label: 'Latencia',                      bg:'#a7e3ee', fg:'#06414c' },
+  { label: 'Problema de cobertura WIFI',    bg:'#bcd9f7', fg:'#0b3a66' },
+  { label: 'Problema de navegación',        bg:'#3c4858', fg:'#ffffff' },
+  { label: 'Equipo apagado',                bg:'#c0c4cc', fg:'#1f2933' },
+  { label: 'AP averiado',                   bg:'#aee0f7', fg:'#07435f' },
+  { label: 'Avería en cable UTP',           bg:'#dfe3e8', fg:'#1f2933' },
+  { label: 'Avería de Patchcore F.O/Cobre', bg:'#8fd6e0', fg:'#053b43' },
+  { label: 'FW averiado',                   bg:'#5b6b7b', fg:'#ffffff' },
+  { label: 'PDU averiado',                  bg:'#f6d154', fg:'#4a3c05' },
+  { label: 'RT averiado',                   bg:'#e879b9', fg:'#4a0c30' },
+  { label: 'SW averiado',                   bg:'#f5a23d', fg:'#4a2c04' },
+  { label: 'UPS averiado',                  bg:'#8b5cf6', fg:'#ffffff' },
+  { label: 'Problema de usuario',           bg:'#111827', fg:'#ffffff' },
+  { label: 'Intervenida',                   bg:'#c0392b', fg:'#ffffff' }
+];
+function estadoMonitoreoColor(label) {
+  for (var i=0;i<ESTADOS_MONITOREO.length;i++){
+    if (ESTADOS_MONITOREO[i].label === label) return ESTADOS_MONITOREO[i];
+  }
+  return { label: label||'', bg:'#ffffff', fg:'#9ca3af' };
+}
+
+// ── DATOS DE MONITOREO (cache local por monitor) ──
+// { monitorApp: nombre, sheet: pestaña, dateCol: 'd/m', rows: [...] }
+var monitoreoData = JSON.parse(localStorage.getItem('inc_monitoreo') || 'null');
+function saveMonitoreoLocal() { localStorage.setItem('inc_monitoreo', JSON.stringify(monitoreoData)); }
+
 // ── MONITOR DEL DÍA ──
 // Se guarda por día. Si cambia el turno durante el día, se actualiza y los
 // tickets nuevos se autocompletan con el nuevo monitor.

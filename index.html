@@ -24,6 +24,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Técnicos</span>
   </button>
+  <button class="sidebar-item" onclick="switchTab('monitoreo',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+    <span>Monitoreo</span>
+  </button>
   <div class="sidebar-bottom">
     <button class="sidebar-sync" onclick="loadFromSheet()" title="Sincronizar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -310,6 +314,42 @@
       </div>
     </section>
 
+    <!-- ════ PANEL MONITOREO ════ -->
+    <section id="panel-monitoreo" class="panel">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Monitoreo Rutinario</h2>
+          <p id="mon-head-info">Cada monitor marca el estado diario de sus centros.</p>
+        </div>
+        <div class="page-header-right">
+          <div id="mon-monitor-wrap" style="display:none;align-items:center;gap:8px">
+            <select id="mon-monitor-select" style="width:auto;min-width:180px"></select>
+            <button class="btn btn-primary btn-sm" style="flex:none" onclick="cargarMonitoreoSeleccionado()">Cargar</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="if(monitoreoData)loadMonitoreo(monitoreoData.monitorApp)">↻ Sync</button>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="section-head" style="flex-wrap:wrap;gap:10px">
+          <div class="section-title">🏫 Centros escolares <span class="count-chip chip-blue" id="mon-count">0</span></div>
+          <div class="section-actions" style="flex-wrap:wrap">
+            <div class="search-wrap"><input type="text" id="mon-search" class="search-inp" placeholder="Buscar código o centro..." oninput="setMonFilter('q',this.value)"></div>
+            <select class="mon-filter" id="mon-f-depto"    onchange="setMonFilter('depto',this.value)"><option value="">Todos</option></select>
+            <select class="mon-filter" id="mon-f-distrito" onchange="setMonFilter('distrito',this.value)"><option value="">Todos</option></select>
+            <select class="mon-filter" id="mon-f-red"      onchange="setMonFilter('red',this.value)"><option value="">Todos</option></select>
+            <select class="mon-filter" id="mon-f-bloque"   onchange="setMonFilter('bloque',this.value)"><option value="">Todos</option></select>
+            <select class="mon-filter" id="mon-f-estado"   onchange="setMonFilter('estado',this.value)"><option value="">Todos</option></select>
+            <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosMon()">Limpiar</button>
+          </div>
+        </div>
+        <div class="hist-body" id="mon-body">
+          <div class="empty-state" style="padding:50px">Sin centros cargados.</div>
+        </div>
+      </div>
+    </section>
+
   </div><!-- /content -->
 </div><!-- /app -->
 
@@ -319,6 +359,14 @@
   <select id="bulk-monitor"></select>
   <button class="btn btn-primary btn-sm" style="flex:none" onclick="aplicarReasignacion()">Reasignar</button>
   <button class="btn btn-ghost btn-sm" onclick="clearSelection()" style="color:#cbd5e1">Cancelar</button>
+</div>
+
+<!-- BARRA DE ESTADO MASIVO (MONITOREO) -->
+<div id="mon-bulk-bar">
+  <span class="bulk-info"><strong id="mon-bulk-count">0</strong> centros</span>
+  <select id="mon-bulk-estado"><option value="">Marcar como...</option></select>
+  <button class="btn btn-primary btn-sm" style="flex:none" onclick="aplicarEstadoMasivo()">Aplicar</button>
+  <button class="btn btn-ghost btn-sm" onclick="clearMonSelection()" style="color:#cbd5e1">Cancelar</button>
 </div>
 
 <!-- DRAWER -->

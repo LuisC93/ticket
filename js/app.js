@@ -29,5 +29,12 @@
   if (typeof renderMonitorDiaBanner === 'function') renderMonitorDiaBanner();
   if (typeof updateBulkBar === 'function') updateBulkBar();
 
+  // Estados de la barra masiva de monitoreo
+  var mbe = document.getElementById('mon-bulk-estado');
+  if (mbe && typeof ESTADOS_MONITOREO !== 'undefined') {
+    mbe.innerHTML = '<option value="">Marcar como...</option>' +
+      ESTADOS_MONITOREO.map(function(e){ return '<option>'+e.label+'</option>'; }).join('');
+  }
+
   renderAll();
 })();
