@@ -492,7 +492,7 @@ function injectLoginScreen() {
       '</div>'+
       '<div id="auth-err"></div>'+
       '<button id="auth-login-btn" onclick="doLogin()">Ingresar</button>'+
-      '<span class="auth-hint"></span>'+
+      
     '</div>';
   document.body.appendChild(el);
 
