@@ -422,9 +422,24 @@ function populateMonitorSelects() {
   });
 
   var f = document.getElementById('f-monitor');
-  if (f && md) {
-    if (MONITORS.indexOf(md) === -1) { var o = document.createElement('option'); o.text = md; f.add(o); }
-    f.value = md;
+  if (currentUser && currentUser.rol === 'Monitor/Técnico') {
+    // Dueño de la cuenta: el monitor es él y no se puede cambiar (como el bloque)
+    if (f) {
+      f.innerHTML = '<option>' + currentUser.nombre + '</option>';
+      f.value = currentUser.nombre;
+      f.disabled = true;
+      f.style.background = 'var(--bg)';
+      f.style.cursor = 'not-allowed';
+    }
+  } else if (f) {
+    // Admin/Técnico: editable, con el monitor del día preseleccionado si existe
+    f.disabled = false;
+    f.style.cursor = '';
+    f.style.background = '';
+    if (md) {
+      if (MONITORS.indexOf(md) === -1) { var o = document.createElement('option'); o.text = md; f.add(o); }
+      f.value = md;
+    }
   }
 }
 

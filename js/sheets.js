@@ -417,9 +417,13 @@ async function preloadAtLogin() {
 }
 
 async function crearTicket() {
-  var mon  = document.getElementById('f-monitor').value || getMonitorDia();
+  // El monitor es SIEMPRE el dueño de la cuenta (no se elige). Admin/Técnico usan el del día.
+  var mon = (currentUser && currentUser.rol === 'Monitor/Técnico')
+    ? currentUser.nombre
+    : (document.getElementById('f-monitor').value || getMonitorDia());
   var tipo = document.getElementById('f-tipo').value;
-  if (!mon || !tipo) { showToast('Completa: Monitor y Problema.', 'err'); return; }
+  if (!mon)  { showToast('No se pudo determinar el monitor.', 'err'); return; }
+  if (!tipo) { showToast('Selecciona el Problema.', 'err'); return; }
   var codVal = document.getElementById('f-cod').value;
   if (!codVal || codVal.length !== 5) { showToast('El código debe tener exactamente 5 dígitos.', 'err'); return; }
   var now = svNow();
@@ -431,8 +435,8 @@ async function crearTicket() {
     tipoInc:   document.getElementById('f-tipo-inc').value,
     desc:      document.getElementById('f-desc').value      || '—',
     tipo:      tipo,
-    motivo:    document.getElementById('f-motivo').value    || '—',
-    tecnico:   document.getElementById('f-tec').value       || 'Sin asignar',
+    motivo:    '—',                 // el motivo se define al resolver
+    tecnico:   'Sin asignar',       // el técnico se asigna al resolver
     horaFinal: '', duracion: '',
     ticketExt: document.getElementById('f-ticket-ext').value || '—',
     estado: 'Abierto', notas: '', id: Date.now()
@@ -478,11 +482,12 @@ async function cerrarTicket() {
 }
 
 function limpiarForm() {
-  ['f-monitor','f-cod','f-bloque','f-tipo-inc','f-tipo','f-desc','f-tec','f-motivo','f-ticket-ext']
+  ['f-cod','f-bloque','f-tipo-inc','f-tipo','f-desc','f-ticket-ext']
     .forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
   var fd = document.getElementById('f-fecha'); if (fd) fd.value = todayISO();
-  // Reestablece el monitor del día en el formulario
-  var fm = document.getElementById('f-monitor'); if (fm) fm.value = getMonitorDia();
+  // Reestablece el monitor: si es Monitor/Técnico, su propio nombre; si no, el del día
+  var fm = document.getElementById('f-monitor');
+  if (fm) fm.value = (currentUser && currentUser.rol === 'Monitor/Técnico') ? currentUser.nombre : getMonitorDia();
   var now = svNow();
   var hEl = document.getElementById('f-hora-h'); if (hEl) hEl.value = now.h;
   var mEl = document.getElementById('f-hora-m'); if (mEl) mEl.value = now.m;
