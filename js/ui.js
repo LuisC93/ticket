@@ -499,8 +499,16 @@ function initMonitoreoPanel() {
     // Carga su propia hoja, sin selector
     if (wrap) wrap.style.display = 'none';
     var ya = monitoreoData && monitoreoData.monitorApp === currentUser.nombre;
-    if (ya) renderMonitoreo();   // muestra al instante lo que ya esté en caché
-    // Refresca desde el servidor si no hay caché o si tiene más de 60s (evita data vieja)
+    if (ya) {
+      renderMonitoreo();   // muestra al instante SU caché
+    } else {
+      // La caché es de otro monitor (o no hay): descártala para no mostrar hoja ajena
+      monitoreoData = null;
+      monSelected.clear();
+      saveMonitoreoLocal();
+      renderMonitoreo();   // pinta vacío con "cargando..."
+    }
+    // Refresca desde el servidor si no hay caché propia o si tiene más de 60s
     var fresco = ya && (Date.now() - (monitoreoData.ts || 0) < 60000);
     if (!fresco && typeof loadMonitoreo === 'function') loadMonitoreo(currentUser.nombre);
   } else {

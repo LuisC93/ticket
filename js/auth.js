@@ -26,6 +26,9 @@ function normalizeUsers(users) {
   });
 }
 
+var AUTH_DEFAULT_USERS = [
+  { id:1, nombre:'Administrador', username:'admin', password:'admin123', rol:'Admin' }
+];
 
 var currentUser  = null;
 var _usersCache  = null;
@@ -126,6 +129,10 @@ async function doLogin() {
 function doLogout() {
   sessionStorage.removeItem(AUTH_SESSION_KEY);
   currentUser = null;
+  // Limpia el monitoreo cacheado para que el próximo usuario no vea hoja ajena
+  monitoreoData = null;
+  localStorage.removeItem('inc_monitoreo');
+  if (typeof monSelected !== 'undefined' && monSelected.clear) monSelected.clear();
   showLoginScreen();
 }
 
@@ -155,16 +162,12 @@ function showMainApp() {
   applyRoleUI();
   updateTopbarUser();
 
-  // Auto-sync al entrar
+  // Cargar TODO al iniciar sesión (tickets + monitoreo) en una sola secuencia,
+  // sin que el usuario tenga que pulsar "Actualizar".
   setTimeout(function(){
-    if(typeof loadFromSheet==='function') loadFromSheet();
-  }, 1000);
-
-  // Precargar el monitoreo del propio monitor (para que su panel abra al instante
-  // y el arrastre del día se dispare apenas inicia sesión).
-  if (currentUser && currentUser.rol === 'Monitor/Técnico' && typeof loadMonitoreo === 'function') {
-    setTimeout(function(){ loadMonitoreo(currentUser.nombre); }, 1800);
-  }
+    if (typeof preloadAtLogin === 'function') preloadAtLogin();
+    else if (typeof loadFromSheet === 'function') loadFromSheet();
+  }, 700);
 
   // Mostrar aviso de configuración si falta JSONBin
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
