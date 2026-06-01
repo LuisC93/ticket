@@ -148,6 +148,9 @@ async function updateRowInSheet(t) {
     action:    'update',
     sheet:     CFG.sheet || 'SLA',
     ticketId:  t.cod,
+    fecha:     isoFromTicket(t.fecha),   // afina la fila correcta (el cod se repite)
+    hora:      t.hora || '',
+    tecnico:   t.tecnico   || '',
     horaFinal: t.horaFinal || '',
     duracion:  t.duracion  || '',
     motivo:    t.motivo    || '',
@@ -347,7 +350,8 @@ async function flushQueue() {
       var t = item.ticket;
       ok = await sheetFetchWrite({
         action: 'update', sheet: CFG.sheet || 'SLA',
-        ticketId: t.cod, horaFinal: t.horaFinal,
+        ticketId: t.cod, fecha: isoFromTicket(t.fecha), hora: t.hora || '',
+        tecnico: t.tecnico || '', horaFinal: t.horaFinal,
         duracion: t.duracion, motivo: t.motivo,
         notas: t.notas || '', estado: t.estado
       });
@@ -448,6 +452,9 @@ async function cerrarTicket() {
   t.horaFinal = nowC.h + ':' + nowC.m + ' ' + nowC.ampm;
   t.motivo    = document.getElementById('r-motivo').value;
   t.notas     = document.getElementById('r-notas').value;
+  // Técnico asignado al cerrar (si se eligió uno, reemplaza al anterior)
+  var rtec = document.getElementById('r-tecnico');
+  if (rtec && rtec.value) t.tecnico = rtec.value;
   t.estado    = 'Cerrado';
   if (t.hora && t.horaFinal !== '--:--') {
     function toMins(ts) {
