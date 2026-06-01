@@ -218,8 +218,15 @@ function openDrawer(idx){
   if(prev){var nc=svNow();prev.textContent=nc.h+':'+nc.m+' '+nc.ampm;}
   var rn=document.getElementById('readonly-notice'); if(rn) rn.style.display='none';
   if(t.motivo&&t.motivo!=='—') document.getElementById('r-motivo').value=t.motivo;
-  var rtec=document.getElementById('r-tecnico');
-  if(rtec) rtec.value = (t.tecnico && t.tecnico!=='Sin asignar') ? t.tecnico : '';
+  // Técnico que resolverá = el usuario actual (automático, texto fijo).
+  // Si el ticket ya tiene técnico asignado, se respeta ese.
+  var tecResuelve = (t.tecnico && t.tecnico!=='Sin asignar')
+    ? t.tecnico
+    : (currentUser ? currentUser.nombre : '');
+  var rtecHidden = document.getElementById('r-tecnico');
+  if(rtecHidden) rtecHidden.value = tecResuelve;
+  var rtecDisp = document.getElementById('r-tecnico-display');
+  if(rtecDisp) rtecDisp.textContent = tecResuelve || '—';
   document.getElementById('resolve-section').style.display=t.estado==='Cerrado'?'none':'block';
   document.getElementById('closed-msg').style.display=t.estado==='Cerrado'?'block':'none';
   document.getElementById('overlay').classList.add('open');
