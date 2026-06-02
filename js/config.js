@@ -36,6 +36,7 @@ var MONITOR_SHEET_MAP = {
   'Luis Yanes': 'Luis Yanes',
   'Sandor':     'Sandor',
   'Jose Cruz':  'Jose Cruz',
+  'Jose':       'Jose Cruz',     // alias: usuario "Jose" → pestaña "Jose Cruz"
   'Jonatan':    'Jonatan',
   'Linda':      'Linda Aviles'   // la pestaña se llama "Linda Aviles"
 };

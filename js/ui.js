@@ -361,23 +361,26 @@ function autoBloqueEdit(cod) {
 // ── FILTRO POR ROL/USUARIO ──
 // Admin y Técnico ven todos los tickets, pero pueden filtrar por un monitor.
 // Monitor/Técnico ve ÚNICAMENTE los suyos (sus códigos), sin importar el filtro.
+function normNombre(s) {
+  return String(s == null ? '' : s).trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+function mismoMonitor(a, b) {
+  var x = normNombre(a), y = normNombre(b);
+  if (!x || !y) return false;
+  return x === y || x.indexOf(y) === 0 || y.indexOf(x) === 0;
+}
 function getVisibleTickets(panel) {
   if (!currentUser) return tickets;
   var rol = currentUser.rol;
   if (rol === 'Admin' || rol === 'Técnico') {
     if (ticketMonitorFilter) {
-      var f = ticketMonitorFilter.trim().toLowerCase();
-      return tickets.filter(function(t) {
-        return String(t.monitor || '').trim().toLowerCase() === f;
-      });
+      return tickets.filter(function(t) { return mismoMonitor(t.monitor, ticketMonitorFilter); });
     }
     return tickets;
   }
   // Monitor/Técnico → solo los suyos
-  var nombre = currentUser.nombre.trim().toLowerCase();
-  return tickets.filter(function(t) {
-    return String(t.monitor || '').trim().toLowerCase() === nombre;
-  });
+  return tickets.filter(function(t) { return mismoMonitor(t.monitor, currentUser.nombre); });
 }
 // ════════════════════════════════════════════════
 //  MONITOR DEL DÍA  (autocompletar + banner)
