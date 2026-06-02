@@ -400,19 +400,23 @@ var _preloadRunning = false;
 async function preloadAtLogin() {
   if (_preloadRunning || !CFG.url || !currentUser) return;
   _preloadRunning = true;
+  // 1) Tickets (SLA) — si falla, no debe trabar nada más
   try {
-    // 1) Tickets (SLA)
     if (typeof loadFromSheet === 'function') await loadFromSheet();
-    // 2) Monitoreo del propio monitor (dispara también el arrastre del día)
+  } catch (e) { console.warn('preload tickets error:', e); }
+
+  // 2) Monitoreo del propio monitor — en segundo plano, SIN await, para que
+  //    aunque la hoja no exista o tarde, NUNCA deje la pantalla en "Sincronizando".
+  try {
     if (currentUser.rol === 'Monitor/Técnico' && typeof loadMonitoreo === 'function') {
-      await loadMonitoreo(currentUser.nombre);
+      loadMonitoreo(currentUser.nombre); // sin await: corre aparte
     }
-    // 3) Reintenta cualquier cambio que quedó pendiente sin conexión
-    if (typeof flushQueue === 'function')    flushQueue();
-    if (typeof flushMonQueue === 'function') flushMonQueue();
-  } catch (e) {
-    console.warn('preloadAtLogin error:', e);
-  }
+  } catch (e) { console.warn('preload monitoreo error:', e); }
+
+  // 3) Reintentos pendientes (también en segundo plano)
+  try { if (typeof flushQueue === 'function')    flushQueue(); } catch (e) {}
+  try { if (typeof flushMonQueue === 'function') flushMonQueue(); } catch (e) {}
+
   _preloadRunning = false;
 }
 
@@ -456,9 +460,10 @@ async function cerrarTicket() {
   t.horaFinal = nowC.h + ':' + nowC.m + ' ' + nowC.ampm;
   t.motivo    = document.getElementById('r-motivo').value;
   t.notas     = document.getElementById('r-notas').value;
-  // Técnico asignado al cerrar (si se eligió uno, reemplaza al anterior)
+  // Técnico que resolvió = usuario actual (automático). Respaldo por si el hidden viene vacío.
   var rtec = document.getElementById('r-tecnico');
-  if (rtec && rtec.value) t.tecnico = rtec.value;
+  var tecVal = (rtec && rtec.value) ? rtec.value : (currentUser ? currentUser.nombre : '');
+  if (tecVal) t.tecnico = tecVal;
   t.estado    = 'Cerrado';
   if (t.hora && t.horaFinal !== '--:--') {
     function toMins(ts) {
