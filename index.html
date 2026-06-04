@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monitoreo C.E</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260604">
+<script>document.write('<link rel="stylesheet" href="css/style.css?v=' + Date.now() + '">');</script>
 </head>
 <body>
 
@@ -413,12 +413,19 @@
   </div>
 </div>
 
-<script src="js/config.js?v=20260604"></script>
-<script src="js/tickets.js?v=20260604"></script>
-<script src="js/sheets.js?v=20260604"></script>
-<script src="js/ui.js?v=20260604"></script>
-<script src="js/app.js?v=20260604"></script>
-<script src="js/auth.js?v=20260604"></script>
+<script>
+// ── CARGA AUTOMÁTICA ANTI-CACHÉ ──
+// Carga los scripts con una "versión" única (la fecha/hora del momento), así el
+// navegador siempre trae la última versión publicada. Nadie tiene que cambiar
+// números a mano: si subes un archivo nuevo a GitHub, la app lo toma solo.
+(function () {
+  var archivos = ['config.js', 'tickets.js', 'sheets.js', 'ui.js', 'app.js', 'auth.js'];
+  var v = Date.now();   // versión única en cada carga
+  for (var i = 0; i < archivos.length; i++) {
+    document.write('<script src="js/' + archivos[i] + '?v=' + v + '"><\/script>');
+  }
+})();
+</script>
 
 <!-- EDIT MODAL -->
 <div id="edit-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;backdrop-filter:blur(2px)" onclick="closeEdit()"></div>
