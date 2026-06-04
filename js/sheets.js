@@ -39,17 +39,21 @@ function showToast(msg, type) {
   }
 }
 
-// ── FETCH LECTURA (ping, getAll, getBloques) ──
-async function sheetFetchRead(params, retries) {
+// ── FETCH LECTURA (ping, getAll, getBloques, getMonitoreo) ──
+// timeoutMs: cuánto esperamos la respuesta. Por defecto 45s, porque las hojas
+// de monitoreo grandes (200+ centros, como la de Jose) tardan más de 8s en
+// responder. Con 8s la app cortaba antes de tiempo y mostraba "No se pudo cargar".
+async function sheetFetchRead(params, retries, timeoutMs) {
   if (!CFG.url) return null;
-  if (retries === undefined) retries = 3;
+  if (retries === undefined) retries = 2;
+  if (timeoutMs === undefined) timeoutMs = 45000;
   var q = Object.keys(params).map(function(k) {
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
   for (var i = 0; i < retries; i++) {
     try {
       var controller = new AbortController();
-      var timeout = setTimeout(function() { controller.abort(); }, 15000);
+      var timeout = setTimeout(function() { controller.abort(); }, timeoutMs);
       var r = await fetch(CFG.url + '?' + q, { signal: controller.signal });
       clearTimeout(timeout);
       return await r.json();
@@ -198,12 +202,12 @@ async function loadMonitoreo(monitorApp, fechaISO) {
   if (!monitorApp) return;
   var sheet = getSheetForMonitor(monitorApp);
   setSyncStatus('syncing');
-  showToast('Cargando centros de ' + monitorApp + '...', 'loading');
+  showToast('Cargando centros de ' + monitorApp + '... (puede tardar unos segundos)', 'loading');
   var d = await sheetFetchRead({
     action: 'getMonitoreo',
     sheet:  sheet,
     fecha:  fechaISO || todayISO()
-  });
+  }, 2, 60000);   // hasta 60s: las hojas grandes (200+ centros) tardan más
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     monitoreoData = {
       monitorApp:     monitorApp,
@@ -222,7 +226,14 @@ async function loadMonitoreo(monitorApp, fechaISO) {
   } else {
     setSyncStatus('err');
     if (typeof renderMonitoreo === 'function') renderMonitoreo();
-    showToast('No se pudo cargar la hoja "' + sheet + '" ✗', 'err');
+    // Si el servidor mandó la lista de pestañas existentes, la mostramos para diagnóstico.
+    if (d && d.hojasDisponibles && d.hojasDisponibles.length) {
+      console.log('⚠ La pestaña "' + sheet + '" no existe en tu Google Sheet.');
+      console.log('📋 Pestañas que SÍ existen:', d.hojasDisponibles.join(', '));
+      showToast('No existe la pestaña "' + sheet + '". Revisa la consola (F12) para ver las pestañas reales.', 'err');
+    } else {
+      showToast('No se pudo cargar la hoja "' + sheet + '" ✗', 'err');
+    }
   }
 }
 
@@ -297,14 +308,13 @@ async function flushMonQueue() {
 
 async function loadFromSheet() {
   if (!CFG.url) { toggleConfig(); return; }
+  // Muestra YA lo último guardado (no espera al servidor) para no dejar la
+  // pantalla vacía/pegada si Google tarda o no responde.
+  if (typeof renderAll === 'function') renderAll();
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
   var params = { action: 'getAll', sheet: CFG.sheet || 'SLA' };
-  // Monitor/Técnico solo descarga sus propias filas. Técnico y Admin descargan todo.
-  if (currentUser && currentUser.rol === 'Monitor/Técnico') {
-    params.monitor = currentUser.nombre;
-  }
-  var d = await sheetFetchRead(params);
+  var d = await sheetFetchRead(params);   // tiene su propio timeout/reintentos
   if (d && d.status === 'ok' && Array.isArray(d.rows)) {
     tickets = d.rows.map(function(r) {
       return {
@@ -319,10 +329,13 @@ async function loadFromSheet() {
     saveLocal();
     setSyncStatus('ok');
     renderAll();
-    showToast(d.rows.length + ' tickets cargados ✓', 'ok');
+    var visibles = (typeof getVisibleTickets === 'function') ? getVisibleTickets('monitor').length : d.rows.length;
+    showToast(visibles + ' tickets cargados ✓', 'ok');
   } else {
+    // El servidor no respondió: conservamos lo local y avisamos, sin quedar pegado.
     setSyncStatus('err');
-    showToast('Error al cargar desde Sheets ✗', 'err');
+    if (typeof renderAll === 'function') renderAll();
+    showToast('Sin respuesta de Sheets · mostrando últimos datos guardados', 'warn');
   }
 }
 
@@ -391,7 +404,8 @@ function autoSync() {
 }
 
 // Cada 1 minuto
-setInterval(autoSync, 60 * 1000);
+// Cada 3 minutos (antes 1) para no saturar la cuota de Apps Script
+setInterval(autoSync, 3 * 60 * 1000);
 
 // ── CARGA INICIAL AL INICIAR SESIÓN ──
 // Trae TODO de una vez (tickets + monitoreo), en orden para no chocar con el

@@ -4,14 +4,30 @@
 // render inicial pueda leerlo sin error. auth.js lo asigna tras el login.
 var currentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
 
-// ── URL DEL SCRIPT (ya configurada, no requiere setup manual) ──
+// ── URL DEL SCRIPT ──
+// Valor por defecto. Si el admin pega otra URL en "Configurar", esa MANDA
+// (útil cuando el script se mueve de cuenta y cambia la URL /exec).
 var CFG_DEFAULT = {
-  url:   'https://script.google.com/macros/s/AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91/exec',
+  url:   'https://script.google.com/macros/s/AKfycbyk8OQcqPNHFZedJywg-bq-hjym0ziYck95SiV2ZFC41c9CedmlIkbMVAjJTphi5LYj/exec',
   sheet: 'SLA'
 };
 var CFG_SAVED = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
-// Siempre usa la URL del código, pero respeta si el admin cambió la hoja
-var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED, { url: CFG_DEFAULT.url });
+// Si en el navegador quedó guardada una URL VIEJA de un despliegue anterior,
+// la descartamos para usar la nueva del código. (Lista de URLs obsoletas.)
+var URLS_OBSOLETAS = [
+  'AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91'
+];
+if (CFG_SAVED.url && URLS_OBSOLETAS.some(function(u){ return CFG_SAVED.url.indexOf(u) > -1; })) {
+  delete CFG_SAVED.url;
+  try {
+    var _tmp = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+    delete _tmp.url;
+    localStorage.setItem('inc_cfg', JSON.stringify(_tmp));
+  } catch (e) {}
+}
+// Usa lo guardado si existe; si no, el valor por defecto del código.
+var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED);
+if (!CFG.url) CFG.url = CFG_DEFAULT.url;
 var tickets = JSON.parse(localStorage.getItem('inc_data') || '[]');
 var activeFilter = 'all', monFilter = 'all', dayFilter = 'today', tecDayFilter = 'today';
 var ticketMonitorFilter = ''; // filtro de tickets por monitor (solo Admin/Técnico; '' = todos)
@@ -41,7 +57,15 @@ var MONITOR_SHEET_MAP = {
   'Linda':      'Linda Aviles'   // la pestaña se llama "Linda Aviles"
 };
 function getSheetForMonitor(nombre) {
-  return MONITOR_SHEET_MAP[nombre] || nombre;
+  if (MONITOR_SHEET_MAP[nombre]) return MONITOR_SHEET_MAP[nombre];
+  // Búsqueda tolerante: ignora mayúsculas y tildes ("jonatan" → "Jonatan")
+  var norm = function(s){ return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); };
+  var n = norm(nombre);
+  for (var k in MONITOR_SHEET_MAP) {
+    if (norm(k) === n) return MONITOR_SHEET_MAP[k];
+  }
+  // Si no está en el mapa, capitaliza la primera letra de cada palabra como respaldo
+  return String(nombre || '').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
 }
 
 // ── ESTADOS DE MONITOREO (desplegable con colores) ──
