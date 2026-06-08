@@ -198,9 +198,20 @@ var monQueue = JSON.parse(localStorage.getItem('inc_mon_queue') || '[]');
 function saveMonQueue() { localStorage.setItem('inc_mon_queue', JSON.stringify(monQueue)); }
 
 // ── CARGAR centros + estado de hoy de un monitor ──
-async function loadMonitoreo(monitorApp, fechaISO) {
+async function loadMonitoreo(monitorApp, fechaISO, forzar) {
   if (!monitorApp) return;
   var sheet = getSheetForMonitor(monitorApp);
+  var fechaKey = fechaISO || 'hoy';
+  var claveFresca = 'mon_' + sheet + '_' + fechaKey;
+  // AHORRO DE CUOTA: si no se fuerza, ya hay datos de este monitor en pantalla,
+  // y siguen frescos (<5 min), no volvemos a pedir a Google.
+  if (!forzar && _esFresco(claveFresca)
+      && monitoreoData && monitoreoData.sheet === sheet
+      && monitoreoData.rows && monitoreoData.rows.length) {
+    setSyncStatus('ok');
+    if (typeof renderMonitoreo === 'function') renderMonitoreo();
+    return;
+  }
   setSyncStatus('syncing');
   showToast('Cargando centros de ' + monitorApp + '... (puede tardar unos segundos)', 'loading');
   var d = await sheetFetchRead({
@@ -220,6 +231,7 @@ async function loadMonitoreo(monitorApp, fechaISO) {
       ts:             Date.now()
     };
     saveMonitoreoLocal();
+    _marcarCarga(claveFresca);   // recordar que esta hoja+fecha está fresca
     setSyncStatus('ok');
     if (typeof renderMonitoreo === 'function') renderMonitoreo();
     showToast(d.rows.length + ' centros · ' + (d.dateCol || '') + (d.isToday === false ? ' (último día)' : '') + ' ✓', 'ok');
@@ -306,11 +318,17 @@ async function flushMonQueue() {
   _monFlushRunning = false;
 }
 
-async function loadFromSheet() {
+async function loadFromSheet(forzar) {
   if (!CFG.url) { toggleConfig(); return; }
   // Muestra YA lo último guardado (no espera al servidor) para no dejar la
   // pantalla vacía/pegada si Google tarda o no responde.
   if (typeof renderAll === 'function') renderAll();
+  // AHORRO DE CUOTA: si no se fuerza y lo guardado sigue fresco (<5 min),
+  // usamos lo local y NO pedimos a Google. El botón Sync llama con forzar=true.
+  if (!forzar && _esFresco('tickets') && tickets && tickets.length) {
+    setSyncStatus('ok');
+    return;
+  }
   setSyncStatus('syncing');
   showToast('Sincronizando datos...', 'loading');
   var params = { action: 'getAll', sheet: CFG.sheet || 'SLA' };
@@ -327,6 +345,7 @@ async function loadFromSheet() {
       };
     });
     saveLocal();
+    _marcarCarga('tickets');   // recordar que los tickets están frescos ahora
     setSyncStatus('ok');
     renderAll();
     var visibles = (typeof getVisibleTickets === 'function') ? getVisibleTickets('monitor').length : d.rows.length;
@@ -396,16 +415,42 @@ window.addEventListener('offline', function() {
   showToast('Sin conexión a internet', 'err');
 });
 
-// ── AUTO-SYNC cada 1 minuto ──
-function autoSync() {
-  if (!CFG.url || !currentUser) return;
-  if (document.hidden) return;
-  loadFromSheet();
+// ── CONTROL DE FRESCURA (ahorro de peticiones a Google) ──
+// Idea: guardamos CUÁNDO se cargó por última vez cada cosa. Si se pide de nuevo
+// antes de que pase FRESCURA_MS, usamos lo que ya está guardado y NO molestamos a
+// Google. Esto reduce muchísimo las peticiones a Apps Script (su cuota es limitada).
+var FRESCURA_MS = 2 * 60 * 1000;   // 2 minutos (varios monitores a la vez)
+
+function _marcarCarga(clave) {
+  try { localStorage.setItem('inc_last_' + clave, String(Date.now())); } catch (e) {}
+}
+function _esFresco(clave) {
+  try {
+    var t = parseInt(localStorage.getItem('inc_last_' + clave) || '0', 10);
+    return t && (Date.now() - t) < FRESCURA_MS;
+  } catch (e) { return false; }
 }
 
-// Cada 1 minuto
-// Cada 3 minutos (antes 1) para no saturar la cuota de Apps Script
-setInterval(autoSync, 3 * 60 * 1000);
+// ── AUTO-SYNC (espaciado, para no saturar la cuota de Apps Script) ──
+function autoSync() {
+  if (!CFG.url || !currentUser) return;
+  if (document.hidden) return;          // si la pestaña no está visible, no pedir
+  if (!_esFresco('tickets')) loadFromSheet();   // tickets, si ya no están frescos
+  // Si el panel de monitoreo está abierto y mostrando datos, también lo refrescamos
+  // (respeta la frescura interna, así que no pide si aún está fresco).
+  try {
+    var panel = document.getElementById('panel-monitoreo');
+    var visible = panel && panel.classList.contains('active');
+    if (visible && monitoreoData && monitoreoData.monitorApp && typeof loadMonitoreo === 'function') {
+      loadMonitoreo(monitoreoData.monitorApp, monitoreoData.dateISO);
+    }
+  } catch (e) {}
+}
+
+// Cada 2 minutos: como varios monitores trabajan a la vez, esto asegura ver los
+// cambios de otros en máximo ~2 min. La frescura evita peticiones repetidas dentro
+// de esa ventana, así que aun con auto-refresco no se satura la cuota.
+setInterval(autoSync, 2 * 60 * 1000);
 
 // ── CARGA INICIAL AL INICIAR SESIÓN ──
 // Trae TODO de una vez (tickets + monitoreo), en orden para no chocar con el
@@ -471,7 +516,8 @@ async function cerrarTicket() {
   var t = tickets[activeIdx];
   if (t.estado === 'Cerrado') return;
   var nowC = svNow();
-  t.horaFinal = nowC.h + ':' + nowC.m + ' ' + nowC.ampm;
+  t.horaFinal   = nowC.h + ':' + nowC.m + ' ' + nowC.ampm;
+  t.fechaCierre = isoFromTicket(new Date().toISOString().slice(0,10)); // fecha de cierre
   t.motivo    = document.getElementById('r-motivo').value;
   t.notas     = document.getElementById('r-notas').value;
   // Técnico que resolvió = usuario actual (automático). Respaldo por si el hidden viene vacío.
@@ -479,18 +525,31 @@ async function cerrarTicket() {
   var tecVal = (rtec && rtec.value) ? rtec.value : (currentUser ? currentUser.nombre : '');
   if (tecVal) t.tecnico = tecVal;
   t.estado    = 'Cerrado';
+  // ── Calcular duración real ──
+  // Usamos fechas completas para que funcione aunque el ticket dure varios días
+  // (ej. abierto el viernes, cerrado el lunes).
   if (t.hora && t.horaFinal !== '--:--') {
-    function toMins(ts) {
-      var parts = ts.trim().split(' ');
-      var hm = parts[0].split(':');
-      var h = parseInt(hm[0]), m = parseInt(hm[1] || 0);
-      var ap = parts[1] || '';
-      if (ap === 'PM' && h !== 12) h += 12;
-      if (ap === 'AM' && h === 12) h = 0;
-      return h * 60 + m;
-    }
-    var m = toMins(t.horaFinal) - toMins(t.hora);
-    if (m > 0) t.duracion = Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+    try {
+      function toMins(ts) {
+        var parts = ts.trim().split(' ');
+        var hm = parts[0].split(':');
+        var h = parseInt(hm[0]), mm = parseInt(hm[1] || 0);
+        var ap = parts[1] || '';
+        if (ap === 'PM' && h !== 12) h += 12;
+        if (ap === 'AM' && h === 12) h = 0;
+        return h * 60 + mm;
+      }
+      var fechaAp  = isoFromTicket(t.fecha);                         // "2026-06-06"
+      var fechaCi  = isoFromTicket(t.fechaCierre || new Date().toISOString().slice(0,10));
+      var msAp     = new Date(fechaAp  + 'T00:00:00').getTime() + toMins(t.hora)      * 60000;
+      var msCi     = new Date(fechaCi  + 'T00:00:00').getTime() + toMins(t.horaFinal) * 60000;
+      var diffMins = Math.round((msCi - msAp) / 60000);
+      if (diffMins > 0) {
+        var hh = Math.floor(diffMins / 60);
+        var mm2 = diffMins % 60;
+        t.duracion = hh + ' h ' + mm2 + ' min';
+      }
+    } catch (eD) { /* si algo falla, dejamos duracion vacío */ }
   }
   saveLocal();
   renderAll();
