@@ -64,22 +64,22 @@ async function sheetFetchRead(params, retries, timeoutMs) {
   return null;
 }
 
-// ── FETCH ESCRITURA (append, update, updateEstado) ──
-// Google redirige las escrituras y el browser no puede leer la respuesta (CORS)
-// pero el script SÍ se ejecuta en el servidor. Asumimos éxito si HTTP es 200 o 302.
+// ── FETCH ESCRITURA (append, update, updateEstado, setMonitoreoBatch...) ──
+// Usa POST para que el payload vaya en el body (sin límite de tamaño).
+// Antes usaba GET con ?payload=..., lo que cortaba arrays largos en el batch.
 async function sheetFetchWrite(data) {
   if (!CFG.url) return false;
-  var payload = encodeURIComponent(JSON.stringify(data));
   try {
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 15000);
-    var r = await fetch(CFG.url + '?payload=' + payload, {
-      signal: controller.signal,
+    var r = await fetch(CFG.url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },  // text/plain evita preflight CORS
+      body:    JSON.stringify(data),
+      signal:  controller.signal,
       redirect: 'follow'
     });
     clearTimeout(timeout);
-    // Si llega aquí sin excepción, el servidor recibió la petición
-    // No importa si no podemos leer el JSON — el script ya se ejecutó
     try {
       var text = await r.text();
       if (text && text.indexOf('"status":"ok"') > -1) return true;
@@ -87,18 +87,11 @@ async function sheetFetchWrite(data) {
         console.warn('sheetFetchWrite error del servidor:', text.slice(0, 200));
         return false;
       }
-      // HTML de redirect = ejecutado pero no podemos leer respuesta = asumir ok
-      return true;
-    } catch(e) {
-      return true; // no podemos leer pero se ejecutó
-    }
+      return r.status === 200 || r.status === 302;
+    } catch(e) { return true; }
   } catch(e) {
-    // Solo falla si hay error de red real
-    if (e.name === 'AbortError') {
-      console.warn('sheetFetchWrite: timeout');
-    } else {
-      console.warn('sheetFetchWrite: error de red:', e.message);
-    }
+    if (e.name === 'AbortError') console.warn('sheetFetchWrite: timeout');
+    else console.warn('sheetFetchWrite: error de red:', e.message);
     return false;
   }
 }
@@ -250,24 +243,22 @@ async function loadMonitoreo(monitorApp, fechaISO, forzar) {
 }
 
 // ── ESCRIBIR estado del día de UN centro ──
+// Para aguantar carga masiva (20+ monitores trabajando a la vez), no mandamos
+// cada cambio al instante. Lo ponemos en la cola y un temporizador de 2s lo manda
+// junto con los demás cambios pendientes (debounce + batching automático).
+// Así si alguien cambia 5 estados seguidos, van todos en 1 petición.
+var _monDebounceTimer = null;
 async function setEstadoMonitoreo(cod, estado) {
   if (!monitoreoData) return false;
   var fecha = monitoreoData.dateISO || todayISO();
-  var ok = false;
-  if (CFG.url) {
-    ok = await sheetFetchWrite({
-      action: 'setMonitoreo',
-      sheet:  monitoreoData.sheet,
-      cod:    cod,
-      fecha:  fecha,
-      estado: estado
-    });
-  }
-  if (!ok) {
-    monQueue.push({ sheet: monitoreoData.sheet, cod: cod, fecha: fecha, estado: estado, ts: Date.now(), attempts: 0 });
-    saveMonQueue();
-  }
-  return ok;
+  // Siempre va a la cola (nunca directo), para poder agrupar con otros cambios.
+  monQueue.push({ sheet: monitoreoData.sheet, cod: cod, fecha: fecha, estado: estado, ts: Date.now(), attempts: 0 });
+  saveMonQueue();
+  // Debounce: espera 2s de "silencio" antes de mandar. Si llega otro cambio en ese
+  // tiempo, reinicia el contador. Cuando nadie toca nada en 2s, manda todo junto.
+  clearTimeout(_monDebounceTimer);
+  _monDebounceTimer = setTimeout(function() { flushMonQueue(); }, 2000);
+  return true;   // optimista: el flush se encarga de reintentar si falla
 }
 
 // ── ESCRIBIR estado del día de VARIOS centros en UNA sola petición ──
@@ -298,18 +289,39 @@ async function flushMonQueue() {
   if (_monFlushRunning || !monQueue.length || !CFG.url) return;
   _monFlushRunning = true;
   var sent = [];
+
+  // AGRUPAR: combinar todos los items con el mismo sheet+fecha+estado en un batch.
+  // Así si hay 10 cambios pendientes del mismo monitor, van en 1 petición.
+  var grupos = {}; // clave: sheet|fecha|estado → {batch:true, cods:[...], indices:[...]}
   for (var i = 0; i < monQueue.length; i++) {
     var it = monQueue[i];
     it.attempts = (it.attempts || 0) + 1;
     if (it.attempts > 3) { sent.push(i); continue; }
-    var ok;
     if (it.batch) {
-      ok = await sheetFetchWrite({ action: 'setMonitoreoBatch', sheet: it.sheet, cods: it.cods, fecha: it.fecha, estado: it.estado });
+      // Ya es batch: mandarlo directo
+      var ok = await sheetFetchWrite({ action: 'setMonitoreoBatch', sheet: it.sheet, cods: it.cods, fecha: it.fecha, estado: it.estado });
+      if (ok) sent.push(i);
     } else {
-      ok = await sheetFetchWrite({ action: 'setMonitoreo', sheet: it.sheet, cod: it.cod, fecha: it.fecha, estado: it.estado });
+      // Agrupar con otros del mismo sheet+fecha+estado
+      var key = it.sheet + '|' + it.fecha + '|' + it.estado;
+      if (!grupos[key]) grupos[key] = { sheet: it.sheet, fecha: it.fecha, estado: it.estado, cods: [], indices: [] };
+      grupos[key].cods.push(it.cod);
+      grupos[key].indices.push(i);
     }
-    if (ok) sent.push(i);
   }
+
+  // Mandar los grupos agrupados
+  for (var key in grupos) {
+    var g = grupos[key];
+    var ok;
+    if (g.cods.length === 1) {
+      ok = await sheetFetchWrite({ action: 'setMonitoreo', sheet: g.sheet, cod: g.cods[0], fecha: g.fecha, estado: g.estado });
+    } else {
+      ok = await sheetFetchWrite({ action: 'setMonitoreoBatch', sheet: g.sheet, cods: g.cods, fecha: g.fecha, estado: g.estado });
+    }
+    if (ok) sent = sent.concat(g.indices);
+  }
+
   if (sent.length) {
     monQueue = monQueue.filter(function(_, i){ return sent.indexOf(i) === -1; });
     saveMonQueue();
