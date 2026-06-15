@@ -91,7 +91,12 @@ function authInit() {
       var u = JSON.parse(s);
       jsonbinGet().then(function(users) {
         var found = users.find(function(x){ return x.id===u.id && x.username===u.username; });
-        if (found) { currentUser = found; showMainApp(); }
+        if (found) {
+          currentUser = found;
+          if (typeof aplicarZona === 'function') aplicarZona(found.zona || ZONA_DEFAULT);
+          if (typeof _actualizarDatosZona === 'function') _actualizarDatosZona();
+          showMainApp();
+        }
         else showLoginScreen();
       });
       return;
@@ -123,6 +128,8 @@ async function doLogin() {
   err.textContent = '';
   currentUser = found;
   sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(found));
+  if (typeof aplicarZona === 'function') aplicarZona(found.zona || ZONA_DEFAULT);
+  if (typeof _actualizarDatosZona === 'function') _actualizarDatosZona();
   showMainApp();
 }
 
@@ -162,14 +169,22 @@ function showMainApp() {
   applyRoleUI();
   updateTopbarUser();
 
-  // Cargar TODO al iniciar sesión (tickets + monitoreo) en una sola secuencia,
-  // sin que el usuario tenga que pulsar "Actualizar".
-  setTimeout(function(){
-    if (typeof preloadAtLogin === 'function') preloadAtLogin();
-    else if (typeof loadFromSheet === 'function') loadFromSheet();
-  }, 700);
+  // Admin sin zona = Admin Global → mostrar dashboard global
+  var esAdminGlobal = currentUser && currentUser.rol === 'Admin' && !currentUser.zona;
+  if (esAdminGlobal) {
+    var btnGlobal = document.getElementById('sidebar-global');
+    if (btnGlobal) {
+      btnGlobal.style.display = 'flex';
+      setTimeout(function(){ switchTab('global', btnGlobal); }, 100);
+    }
+    if (typeof initDashboardGlobal === 'function') initDashboardGlobal();
+  } else {
+    setTimeout(function(){
+      if (typeof preloadAtLogin === 'function') preloadAtLogin();
+      else if (typeof loadFromSheet === 'function') loadFromSheet();
+    }, 700);
+  }
 
-  // Mostrar aviso de configuración si falta JSONBin
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
     setTimeout(function(){
       if(typeof showToast==='function')
@@ -182,17 +197,20 @@ function showMainApp() {
 function applyRoleUI() {
   if (!currentUser) return;
   var perms = AUTH_PERMS[currentUser.rol];
+  var esAdminGlobal = currentUser.rol === 'Admin' && !currentUser.zona;
   var btnNuevo   = document.querySelector('.sidebar-item[onclick*="nuevo"]');
   var btnTecnico = document.querySelector('.sidebar-item[onclick*="tecnico"]');
-  if (btnNuevo)   btnNuevo.style.display   = perms.crear  ? 'flex' : 'none';
+  var btnGlobal  = document.getElementById('sidebar-global');
+  if (btnNuevo)   btnNuevo.style.display   = perms.crear ? 'flex' : 'none';
   if (btnTecnico) btnTecnico.style.display = (perms.cerrar||perms.verTodos) ? 'flex' : 'none';
+  if (btnGlobal)  btnGlobal.style.display  = esAdminGlobal ? 'flex' : 'none';
   var btnCfg = document.querySelector('.btn-report');
   if (btnCfg) btnCfg.style.display = perms.config ? 'flex' : 'none';
-  if (!perms.crear) {
+  // Admin con zona o no-Admin → ir a su panel normal
+  if (!perms.crear && !esAdminGlobal) {
     var btnMon = document.querySelector('.sidebar-item[onclick*="monitor"]');
     if (btnMon) btnMon.click();
   }
-  // Con el usuario ya cargado, refresca el monitor del día y los selects.
   if (typeof populateMonitorSelects === 'function') populateMonitorSelects();
   if (typeof renderMonitorDiaBanner === 'function') renderMonitorDiaBanner();
 }
@@ -221,6 +239,14 @@ function injectTopbarUser() {
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
         'Gestionar usuarios' +
       '</button>' +
+      '<div id="auth-zona-selector" style="display:none;padding:8px 16px;border-top:1px solid var(--border)">' +
+        '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">CAMBIAR ZONA</div>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button onclick="cambiarZona(\'central\')" id="zona-btn-central" style="flex:1;padding:5px 4px;border-radius:8px;border:1.5px solid var(--border);background:none;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sans)">Central</button>' +
+          '<button onclick="cambiarZona(\'oriental\')" id="zona-btn-oriental" style="flex:1;padding:5px 4px;border-radius:8px;border:1.5px solid var(--border);background:none;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sans)">Oriental</button>' +
+          '<button onclick="cambiarZona(\'occidental\')" id="zona-btn-occidental" style="flex:1;padding:5px 4px;border-radius:8px;border:1.5px solid var(--border);background:none;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sans)">Occidental</button>' +
+        '</div>' +
+      '</div>' +
       '<button id="auth-btn-jsonbin" onclick="openJsonbinConfig()" style="width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:8px;font-family:var(--sans)">' +
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>' +
         'Configurar JSONBin' +
@@ -260,6 +286,11 @@ function updateTopbarUser() {
   if(btu) btu.style.display=authCan('usuarios')?'flex':'none';
   var btj=document.getElementById('auth-btn-jsonbin');
   if(btj) btj.style.display=authCan('config')?'flex':'none';
+  // Selector de zona: para Admin con zona (para cambiar de zona rápido)
+  var esAdminConZona = currentUser && currentUser.rol === 'Admin' && currentUser.zona;
+  var zs = document.getElementById('auth-zona-selector');
+  if (zs) zs.style.display = esAdminConZona ? 'block' : 'none';
+  actualizarBotonesZona();
 }
 
 function toggleUserMenu() {
@@ -590,3 +621,33 @@ window.addEventListener('load', function() {
   }
   authInit();
 });
+// ── GESTIÓN DE ZONAS ──
+function actualizarBotonesZona() {
+  if (typeof ZONAS === 'undefined') return;
+  Object.keys(ZONAS).forEach(function(z) {
+    var btn = document.getElementById('zona-btn-' + z);
+    if (!btn) return;
+    var activo = (z === zonaActiva);
+    btn.style.background  = activo ? '#2563eb' : '';
+    btn.style.color       = activo ? '#fff'     : '';
+    btn.style.borderColor = activo ? '#2563eb'  : 'var(--border)';
+  });
+}
+
+function cambiarZona(zona) {
+  if (!ZONAS[zona] || zona === zonaActiva) return;
+  aplicarZona(zona);
+  if (typeof _actualizarDatosZona === 'function') _actualizarDatosZona();
+  actualizarBotonesZona();
+  // Limpiar caché de la zona anterior
+  localStorage.removeItem('inc_data');
+  localStorage.removeItem('inc_monitoreo');
+  localStorage.removeItem('inc_last_tickets');
+  if (typeof tickets !== 'undefined') tickets = [];
+  if (typeof monitoreoData !== 'undefined') monitoreoData = null;
+  var m = document.getElementById('auth-user-menu');
+  if (m) m.style.display = 'none';
+  if (typeof showToast === 'function') showToast('Zona: ' + ZONAS[zona].nombre + ' ✓', 'ok');
+  if (typeof loadFromSheet === 'function') loadFromSheet(true);
+  if (typeof populateMonitorSelects === 'function') populateMonitorSelects();
+}
