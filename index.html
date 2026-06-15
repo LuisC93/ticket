@@ -28,6 +28,14 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
     <span>Monitoreo</span>
   </button>
+  <button class="sidebar-item" id="sidebar-global" onclick="switchTab('global',this)" style="display:none" title="Dashboard Global">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>
+    <span>Global</span>
+  </button>
+  <button class="sidebar-item" id="sidebar-supervisor" onclick="switchTab('supervisor',this)" style="display:none" title="Mi Zona">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+    <span>Mi Zona</span>
+  </button>
   <div class="sidebar-bottom">
     <button class="sidebar-sync" onclick="loadFromSheet()" title="Sincronizar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -331,6 +339,70 @@
       </div>
     </section>
 
+    <!-- ════ PANEL SUPERVISOR (Supervisor de zona) ════ -->
+    <section id="panel-supervisor" class="panel">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2 id="supervisor-title">Mi Zona</h2>
+          <p id="supervisor-last-update" style="color:var(--text3);font-size:12px;margin:0">Cargando...</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-ghost btn-sm" onclick="cargarDashboardSupervisor(true)">↻ Sync</button>
+        </div>
+      </div>
+      <!-- Métricas principales -->
+      <div id="supervisor-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px"></div>
+      <!-- Estadísticas por monitor -->
+      <div style="background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">📊 Tickets por monitor</div>
+        <div id="supervisor-por-monitor"></div>
+      </div>
+      <!-- SLA y monitoreo -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div style="background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:20px">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">⏱ SLA de resolución</div>
+          <div id="supervisor-sla"></div>
+        </div>
+        <div style="background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:20px">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">🏫 Estado del monitoreo</div>
+          <div id="supervisor-monitoreo"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL GLOBAL (Admin sin zona) ════ -->
+    <section id="panel-global" class="panel">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Dashboard Global</h2>
+          <p id="global-last-update" style="color:var(--text3);font-size:12px;margin:0">Cargando...</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-ghost btn-sm" onclick="cargarDashboardGlobal(true)">↻ Sync</button>
+        </div>
+      </div>
+      <!-- Tarjetas por zona -->
+      <div id="global-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px"></div>
+      <!-- Gráficas comparativas -->
+      <div style="background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:20px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:16px">Comparativa de zonas</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:10px">TICKETS ACTIVOS</div>
+            <div id="chart-activos"></div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:10px">TICKETS CERRADOS HOY</div>
+            <div id="chart-cerrados"></div>
+          </div>
+        </div>
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:10px">SLA PROMEDIO DE RESOLUCIÓN</div>
+          <div id="chart-sla" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>
+        </div>
+      </div>
+    </section>
+
   </div><!-- /content -->
 </div><!-- /app -->
 
@@ -415,7 +487,7 @@
 // navegador siempre trae la última versión publicada. Nadie tiene que cambiar
 // números a mano: si subes un archivo nuevo a GitHub, la app lo toma solo.
 (function () {
-  var archivos = ['config.js', 'tickets.js', 'sheets.js', 'ui.js', 'app.js', 'auth.js'];
+  var archivos = ['config.js', 'tickets.js', 'sheets.js', 'ui.js', 'app.js', 'auth.js', 'global.js', 'supervisor.js', 'debug-tools.js'];
   var v = Date.now();   // versión única en cada carga
   for (var i = 0; i < archivos.length; i++) {
     document.write('<script src="js/' + archivos[i] + '?v=' + v + '"><\/script>');

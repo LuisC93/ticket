@@ -1,182 +1,237 @@
-// global.js — Dashboard Global para Admin sin zona asignada.
-// Consulta las 3 zonas en paralelo y muestra tickets, SLA y comparativa.
+// config.js — Estado global, configuración y mapa de bloques
 
-var _globalData   = {};
-var _globalTimer  = null;
-var _globalRunning = false;
+var currentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
 
-function initDashboardGlobal() {
-  cargarDashboardGlobal(false);
-  clearInterval(_globalTimer);
-  _globalTimer = setInterval(function() { cargarDashboardGlobal(false); }, 5 * 60 * 1000);
-}
-
-async function cargarDashboardGlobal(forzar) {
-  if (_globalRunning) return;
-  _globalRunning = true;
-  var upd = document.getElementById('global-last-update');
-  if (upd) upd.textContent = 'Actualizando...';
-
-  var zonas = Object.keys(ZONAS);
-  var promesas = zonas.map(function(z) { return _cargarZona(z, forzar); });
-  var resultados = await Promise.allSettled(promesas);
-  resultados.forEach(function(r, i) {
-    if (r.status === 'fulfilled') _globalData[zonas[i]] = r.value;
-  });
-
-  _renderDashboard();
-  _globalRunning = false;
-  var ahora = new Date();
-  if (upd) upd.textContent = 'Última actualización: ' +
-    ahora.getHours() + ':' + String(ahora.getMinutes()).padStart(2,'0');
-}
-
-async function _cargarZona(zona, forzar) {
-  var url = ZONAS[zona] && ZONAS[zona].url;
-  if (!url || url.indexOf('PENDIENTE') > -1) {
-    return { zona: zona, tickets: [], error: 'URL no configurada' };
+// ── ZONAS ──
+var ZONAS = {
+  central: {
+    nombre: 'Central',
+    url: 'https://script.google.com/macros/s/AKfycbxdjgnYyxWz0pr7W6SdkTMbyebpyYQRWjdPFthH2vC27YEDn4ZnxU5AcL59cq35B2ya/exec'
+  },
+  oriental: {
+    nombre: 'Oriental',
+    url: 'https://script.google.com/macros/s/AKfycbxsCyQuxuN55ieQP7poT9zhsy4gPiAWybr7Xhcqlh4fVW1Dcair9dvRy_VhVuYslgI/exec'
+  },
+  occidental: {
+    nombre: 'Occidental',
+    url: 'https://script.google.com/macros/s/AKfycbxGlxrSRvbOr-LRdH6Skz08haSW4OwtQLYovD-T5f5IYSUnOzpFvLOqmpG6Nk58W-sNlA/exec'
   }
-  var cacheKey = 'global_' + zona;
-  if (!forzar) {
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.data;
-    } catch(e) {}
-  }
+};
+var ZONA_DEFAULT = 'central';
+
+// ── URL DEL SCRIPT ──
+var CFG_DEFAULT = {
+  url:   ZONAS.central.url,
+  sheet: 'SLA'
+};
+var CFG_SAVED = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+var URLS_OBSOLETAS = [
+  'AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91',
+  'AKfycbyk8OQcqPNHFZedJywg-bq-hjym0ziYck95SiV2ZFC41c9CedmlIkbMVAjJTphi5LYj'
+];
+if (CFG_SAVED.url && URLS_OBSOLETAS.some(function(u){ return CFG_SAVED.url.indexOf(u) > -1; })) {
+  delete CFG_SAVED.url;
   try {
-    var ctrl = new AbortController();
-    var to = setTimeout(function(){ ctrl.abort(); }, 30000);
-    var r = await fetch(url + '?action=getAll&sheet=SLA', { signal: ctrl.signal });
-    clearTimeout(to);
-    var d = await r.json();
-    var rows = (d.status === 'ok' && Array.isArray(d.rows)) ? d.rows : [];
-    // Convertir filas a objetos ticket
-    var tickets = rows.map(function(row) {
-      return {
-        fecha: row[0], hora: row[1], monitor: row[2], cod: row[3],
-        bloque: row[4], tipo: row[5], desc: row[6], problema: row[7],
-        motivo: row[8], tecnico: row[9], horaFinal: row[10],
-        duracion: row[11], ticketExt: row[12], estado: row[13]
-      };
-    });
-    var data = { zona: zona, tickets: tickets, error: null };
-    try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
-    return data;
-  } catch(e) {
-    return { zona: zona, tickets: [], error: e.name === 'AbortError' ? 'Timeout' : e.message };
+    var _tmp = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+    delete _tmp.url;
+    localStorage.setItem('inc_cfg', JSON.stringify(_tmp));
+  } catch (e) {}
+}
+var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED);
+if (!CFG.url) CFG.url = CFG_DEFAULT.url;
+
+// Zona activa (se establece al hacer login según el campo 'zona' del usuario).
+var zonaActiva = localStorage.getItem('inc_zona') || ZONA_DEFAULT;
+
+// Aplicar la URL de la zona activa.
+function aplicarZona(zona) {
+  if (!ZONAS[zona]) zona = ZONA_DEFAULT;
+  zonaActiva = zona;
+  localStorage.setItem('inc_zona', zona);
+  var savedManual = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+  if (!savedManual.url) {
+    CFG.url = ZONAS[zona].url;
   }
 }
 
-function _renderDashboard() {
-  _renderTarjetas();
-  _renderGraficas();
-}
+// Aplicar la zona guardada al cargar
+aplicarZona(zonaActiva);
 
-function _renderTarjetas() {
-  var cont = document.getElementById('global-cards');
-  if (!cont) return;
-  var colorZona = { central: '#2563eb', oriental: '#16a34a', occidental: '#d97706' };
-  cont.innerHTML = Object.keys(ZONAS).map(function(z) {
-    var d = _globalData[z] || {};
-    var tickets = d.tickets || [];
-    var hoyISO = todayISO();
-    var activos  = tickets.filter(function(t){ return t.estado === 'Abierto'; }).length;
-    var cerradosHoy = tickets.filter(function(t){
-      return t.estado === 'Cerrado' && isoFromTicket(t.fecha) === hoyISO;
-    }).length;
-    var sla = _calcSLA(tickets);
-    var color = colorZona[z] || '#64748b';
-    return '<div style="background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:20px;border-top:4px solid ' + color + '">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div style="font-size:16px;font-weight:700;color:var(--text)">' + ZONAS[z].nombre + '</div>' +
-        (d.error ? '<span style="font-size:11px;color:#dc2626;background:#fef2f2;padding:2px 8px;border-radius:20px">' + d.error + '</span>' : '<span style="font-size:11px;color:#16a34a;background:#f0fdf4;padding:2px 8px;border-radius:20px">Conectado</span>') +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
-        '<div style="text-align:center;background:#fef2f2;border-radius:10px;padding:14px">' +
-          '<div style="font-size:28px;font-weight:800;color:#dc2626">' + activos + '</div>' +
-          '<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px">Activos</div>' +
-        '</div>' +
-        '<div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px">' +
-          '<div style="font-size:28px;font-weight:800;color:#16a34a">' + cerradosHoy + '</div>' +
-          '<div style="font-size:11px;color:#16a34a;font-weight:600;margin-top:2px">Cerrados hoy</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="background:#f8fafc;border-radius:10px;padding:12px">' +
-        '<div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px">SLA PROMEDIO</div>' +
-        '<div style="font-size:20px;font-weight:800;color:' + color + '">' + sla.promedio + '</div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + sla.total + ' tickets resueltos · Máx: ' + sla.maximo + '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
+var tickets = JSON.parse(localStorage.getItem('inc_data') || '[]');
+var activeFilter = 'all', monFilter = 'all', dayFilter = 'today', tecDayFilter = 'today';
+var ticketMonitorFilter = '';
+var activeIdx = null;
 
-function _renderGraficas() {
-  var colorZona = { central: '#2563eb', oriental: '#16a34a', occidental: '#d97706' };
-  var hoyISO = todayISO();
+// ── MAPA BLOQUES ──
+var bloquesMap = JSON.parse(localStorage.getItem('inc_bloques') || '{}');
 
-  // Activos
-  _renderBarras('chart-activos', function(z) {
-    var t = (_globalData[z] || {}).tickets || [];
-    return t.filter(function(x){ return x.estado === 'Abierto'; }).length;
-  }, colorZona);
+// ── MONITORES POR ZONA ──
+// Cada zona tiene su propia lista de monitores y mapa de pestañas.
+var MONITORS_POR_ZONA = {
+  central: ['Jose Luis', 'Ericka Chacon', 'William Molina', 'Barbara Magaña', 'Alejandra franco'],
+  oriental: ['Boris Garcia', 'Luis Yanes', 'Jimmy Francisco'],
+  occidental: ['Jonatan Aparicio', 'Linda Aviles', 'Michael', 'Jose Antonio', 'Sandor Hernandez']
+};
 
-  // Cerrados hoy
-  _renderBarras('chart-cerrados', function(z) {
-    var t = (_globalData[z] || {}).tickets || [];
-    return t.filter(function(x){ return x.estado === 'Cerrado' && isoFromTicket(x.fecha) === hoyISO; }).length;
-  }, colorZona);
+// Lista activa según zona (se actualiza al cambiar de zona)
+var MONITORS = MONITORS_POR_ZONA[zonaActiva] || MONITORS_POR_ZONA.central;
 
-  // SLA
-  var el = document.getElementById('chart-sla');
-  if (el) {
-    el.innerHTML = Object.keys(ZONAS).map(function(z) {
-      var t = (_globalData[z] || {}).tickets || [];
-      var sla = _calcSLA(t);
-      var color = colorZona[z] || '#64748b';
-      return '<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
-        '<div style="font-size:11px;font-weight:700;color:' + color + ';margin-bottom:6px">' + ZONAS[z].nombre.toUpperCase() + '</div>' +
-        '<div style="font-size:22px;font-weight:800;color:var(--text)">' + sla.promedio + '</div>' +
-        '<div style="font-size:10px;color:var(--text3);margin-top:4px">' + sla.total + ' resueltos</div>' +
-      '</div>';
-    }).join('');
+// Mapa monitor → pestaña del Sheet por zona
+var MONITOR_SHEET_MAP_POR_ZONA = {
+  central: {
+    'Jose Luis':      'Jose Luis',
+    'Ericka Chacon':  'Ericka Chacon',
+    'William Molina': 'William Molina',
+    'Barbara Magaña': 'Barbara Magaña',
+    'Alejandra franco': 'Alejandra franco'
+  },
+  oriental: {
+    'Boris Garcia':    'Boris Garcia',
+    'Luis Yanes':      'Luis Yanes',
+    'Jimmy Francisco': 'Jimmy Francisco'
+  },
+  occidental: {
+    'Jonatan Aparicio':  'Jonatan Aparicio',
+    'Linda Aviles':      'Linda Aviles',
+    'Michael':           'Michael',
+    'Jose Antonio':      'Jose Antonio',
+    'Sandor Hernandez':  'Sandor Hernandez'
   }
+};
+
+var MONITOR_SHEET_MAP = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP_POR_ZONA.central;
+
+function getSheetForMonitor(nombre) {
+  var mapa = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP;
+  if (mapa[nombre]) return mapa[nombre];
+  var norm = function(s){ return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); };
+  var n = norm(nombre);
+  for (var k in mapa) {
+    if (norm(k) === n) return mapa[k];
+  }
+  return String(nombre || '').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
 }
 
-function _renderBarras(id, valFn, colorZona) {
+// Actualizar MONITORS y MONITOR_SHEET_MAP cuando cambie la zona
+function _actualizarDatosZona() {
+  MONITORS = MONITORS_POR_ZONA[zonaActiva] || MONITORS_POR_ZONA.central;
+  MONITOR_SHEET_MAP = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP_POR_ZONA.central;
+}
+
+// ── ESTADOS DE MONITOREO ──
+var ESTADOS_MONITOREO = [
+  { label: 'Navegación estable',            bg:'#34a853', fg:'#ffffff' },
+  { label: 'Corte F.O externa',             bg:'#ea4335', fg:'#ffffff' },
+  { label: 'Problema de ancho de banda',    bg:'#f4a3a0', fg:'#5c0a06' },
+  { label: 'Saturación',                    bg:'#fbe08a', fg:'#5c4708' },
+  { label: 'Latencia',                      bg:'#a7e3ee', fg:'#06414c' },
+  { label: 'Problema de cobertura WIFI',    bg:'#bcd9f7', fg:'#0b3a66' },
+  { label: 'Problema de navegación',        bg:'#3c4858', fg:'#ffffff' },
+  { label: 'Equipo apagado',                bg:'#c0c4cc', fg:'#1f2933' },
+  { label: 'AP averiado',                   bg:'#aee0f7', fg:'#07435f' },
+  { label: 'Avería en cable UTP',           bg:'#dfe3e8', fg:'#1f2933' },
+  { label: 'Avería de Patchcore F.O/Cobre', bg:'#8fd6e0', fg:'#053b43' },
+  { label: 'FW averiado',                   bg:'#5b6b7b', fg:'#ffffff' },
+  { label: 'PDU averiado',                  bg:'#f6d154', fg:'#4a3c05' },
+  { label: 'RT averiado',                   bg:'#e879b9', fg:'#4a0c30' },
+  { label: 'SW averiado',                   bg:'#f5a23d', fg:'#4a2c04' },
+  { label: 'UPS averiado',                  bg:'#8b5cf6', fg:'#ffffff' },
+  { label: 'Problema de usuario',           bg:'#111827', fg:'#ffffff' },
+  { label: 'Intervenida',                   bg:'#c0392b', fg:'#ffffff' }
+];
+function estadoMonitoreoColor(label) {
+  for (var i=0;i<ESTADOS_MONITOREO.length;i++){
+    if (ESTADOS_MONITOREO[i].label === label) return ESTADOS_MONITOREO[i];
+  }
+  return { label: label||'', bg:'#ffffff', fg:'#9ca3af' };
+}
+
+// ── DATOS DE MONITOREO ──
+var monitoreoData = JSON.parse(localStorage.getItem('inc_monitoreo') || 'null');
+function saveMonitoreoLocal() { localStorage.setItem('inc_monitoreo', JSON.stringify(monitoreoData)); }
+
+// ── MONITOR DEL DÍA ──
+function getMonitorDia() {
+  try {
+    var raw = JSON.parse(localStorage.getItem('inc_monitor_dia') || 'null');
+    if (raw && raw.fecha === todayISO() && raw.nombre) return raw.nombre;
+  } catch (e) {}
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.rol === 'Monitor/Técnico') {
+    return currentUser.nombre || '';
+  }
+  return '';
+}
+function setMonitorDia(nombre) {
+  localStorage.setItem('inc_monitor_dia', JSON.stringify({ fecha: todayISO(), nombre: nombre || '' }));
+}
+
+// ── HELPER: llenar <select> ──
+function fillSelect(id, items, opts) {
+  opts = opts || {};
   var el = document.getElementById(id);
   if (!el) return;
-  var zonas = Object.keys(ZONAS);
-  var valores = zonas.map(valFn);
-  var max = Math.max.apply(null, valores) || 1;
-  el.innerHTML = zonas.map(function(z, i) {
-    var pct = Math.round((valores[i] / max) * 100);
-    var color = colorZona[z] || '#64748b';
-    return '<div style="margin-bottom:10px">' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
-        '<span style="font-size:12px;font-weight:600;color:var(--text)">' + ZONAS[z].nombre + '</span>' +
-        '<span style="font-size:13px;font-weight:800;color:' + color + '">' + valores[i] + '</span>' +
-      '</div>' +
-      '<div style="background:#f1f5f9;border-radius:4px;height:10px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:4px;transition:width .5s ease"></div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
+  var current = el.value;
+  var html = '';
+  if (opts.placeholder) html += '<option value="">' + opts.placeholder + '</option>';
+  var list = items.slice();
+  if (opts.preselect && list.indexOf(opts.preselect) === -1) list.unshift(opts.preselect);
+  html += list.map(function(v){ return '<option>' + v + '</option>'; }).join('');
+  el.innerHTML = html;
+  if (opts.preselect) el.value = opts.preselect;
+  else if (current) el.value = current;
 }
 
-function _calcSLA(tickets) {
-  var duraciones = [];
-  tickets.forEach(function(t) {
-    var dur = String(t.duracion || '');
-    if (!dur) return;
-    var m = dur.match(/(\d+)\s*h\s*(\d+)/);
-    if (m) duraciones.push(parseInt(m[1]) * 60 + parseInt(m[2]));
-  });
-  if (!duraciones.length) return { promedio: '—', maximo: '—', total: 0 };
-  var prom = Math.round(duraciones.reduce(function(a,b){return a+b;},0) / duraciones.length);
-  var max  = Math.max.apply(null, duraciones);
-  function fmt(mins) {
-    if (mins < 60) return mins + ' min';
-    return Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
-  }
-  return { promedio: fmt(prom), maximo: fmt(max), total: duraciones.length };
+function saveLocal() { localStorage.setItem('inc_data', JSON.stringify(tickets)); }
+
+// ── DATE HELPERS ──
+function todayISO() {
+  var sv = new Date(new Date().getTime() - (6 * 60 * 60 * 1000));
+  return sv.toISOString().slice(0, 10);
+}
+function svNow() {
+  var sv = new Date(new Date().getTime() - (6 * 60 * 60 * 1000));
+  var h = sv.getUTCHours(), m = sv.getUTCMinutes();
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return { h: String(h), m: String(m).padStart(2, '0'), ampm: ampm };
+}
+
+// ── BLOQUE AUTO ──
+function getBloqueFromCod(cod) {
+  if (!cod || cod.length !== 5) return '';
+  return bloquesMap[cod] || '';
+}
+
+// ── CARGA BLOQUES ──
+async function cargarBloques() {
+  if (!CFG.url) return;
+  try {
+    var r = await fetch(CFG.url + '?action=getBloques');
+    var d = await r.json();
+    if (d && d.status === 'ok' && d.map) {
+      bloquesMap = d.map;
+      localStorage.setItem('inc_bloques', JSON.stringify(bloquesMap));
+    }
+  } catch (e) { console.warn('No se pudieron cargar los bloques:', e); }
+}
+
+// ── CONFIG ──
+function saveConfig() {
+  CFG.url = document.getElementById('cfg-url').value.trim();
+  CFG.sheet = document.getElementById('cfg-sheet').value.trim() || 'SLA';
+  localStorage.setItem('inc_cfg', JSON.stringify(CFG));
+  setSyncStatus('ok');
+  showAlert('alert-ok', 'alert-err', 'Configuración guardada ✓');
+  cargarBloques();
+}
+function loadConfig() {
+  var urlEl = document.getElementById('cfg-url');
+  var sheetEl = document.getElementById('cfg-sheet');
+  if (urlEl) urlEl.value = CFG.url || CFG_DEFAULT.url;
+  if (sheetEl) sheetEl.value = CFG.sheet || 'SLA';
+  if (CFG.url) { setSyncStatus('ok'); cargarBloques(); }
+}
+function toggleConfig() {
+  var el = document.getElementById('config-section');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
