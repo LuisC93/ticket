@@ -238,10 +238,12 @@ function closeDrawer(){document.getElementById('overlay').classList.remove('open
 function switchTab(n,btn){
   document.querySelectorAll('.sidebar-item').forEach(function(b){b.classList.remove('active');});
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
-  btn.classList.add('active');
-  document.getElementById('panel-'+n).classList.add('active');
-  var titles={monitor:'Tickets del Día',nuevo:'Nueva Incidencia',tecnico:'Panel Técnico',monitoreo:'Monitoreo Rutinario'};
-  document.getElementById('page-title').textContent=titles[n]||'';
+  if (btn) btn.classList.add('active');
+  var panel = document.getElementById('panel-'+n);
+  if (panel) panel.classList.add('active');
+  var titles={monitor:'Tickets del Día',nuevo:'Nueva Incidencia',tecnico:'Panel Técnico',monitoreo:'Monitoreo Rutinario',supervisor:'Mi Zona',global:'Dashboard Global'};
+  var titleEl = document.getElementById('page-title');
+  if (titleEl) titleEl.textContent=titles[n]||'';
   if (n === 'monitoreo' && typeof initMonitoreoPanel === 'function') {
     if (typeof clearSelection === 'function') clearSelection();
     initMonitoreoPanel();

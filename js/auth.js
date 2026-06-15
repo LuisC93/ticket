@@ -178,14 +178,20 @@ function showMainApp() {
     var btnGlobal = document.getElementById('sidebar-global');
     if (btnGlobal) {
       btnGlobal.style.display = 'flex';
-      setTimeout(function(){ switchTab('global', btnGlobal); }, 100);
+      setTimeout(function(){
+        var btn = document.getElementById('sidebar-global');
+        if (btn) switchTab('global', btn);
+      }, 300);
     }
     if (typeof initDashboardGlobal === 'function') initDashboardGlobal();
   } else if (esSupervisor) {
     var btnSupervisor = document.getElementById('sidebar-supervisor');
     if (btnSupervisor) {
       btnSupervisor.style.display = 'flex';
-      setTimeout(function(){ switchTab('supervisor', btnSupervisor); }, 100);
+      setTimeout(function(){
+        var btn = document.getElementById('sidebar-supervisor');
+        if (btn) switchTab('supervisor', btn);
+      }, 300);
     }
     if (typeof initDashboardSupervisor === 'function') initDashboardSupervisor();
   } else {
