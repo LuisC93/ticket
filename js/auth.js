@@ -336,7 +336,7 @@ function renderUsersList(users) {
       '<div style="width:38px;height:38px;border-radius:50%;background:'+rc.av+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">'+initials+'</div>' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:14px;font-weight:600;color:var(--text)">'+escHtml(u.nombre)+(isSelf?' <span style="font-size:10px;color:var(--text3)">(tú)</span>':'')+'</div>' +
-        '<div style="font-size:12px;color:var(--text3)">@'+escHtml(u.username)+'</div>' +
+        '<div style="font-size:12px;color:var(--text3)">@'+escHtml(u.username) + (u.zona ? ' · <span style="color:var(--primary)">'+u.zona+'</span>' : ' · <span style="color:#f59e0b">global</span>') + '</div>' +
       '</div>' +
       '<span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600;background:'+rc.bg+';color:'+rc.color+';margin-right:6px;white-space:nowrap">'+escHtml(u.rol)+'</span>' +
       (canEdit ?
@@ -370,6 +370,7 @@ function openNewUser() {
   document.getElementById('umodal-username').value='';
   document.getElementById('umodal-password').value='';
   document.getElementById('umodal-rol').value='Monitor/Técnico';
+  document.getElementById('umodal-zona').value='central';
   document.getElementById('umodal-pass-req').textContent='Mínimo 6 caracteres.';
   document.getElementById('umodal-err').textContent='';
   document.getElementById('umodal-bg').style.display='flex';
@@ -385,6 +386,7 @@ async function openEditUser(id) {
   document.getElementById('umodal-username').value=u.username;
   document.getElementById('umodal-password').value='';
   document.getElementById('umodal-rol').value=u.rol;
+  document.getElementById('umodal-zona').value=u.zona||'';
   document.getElementById('umodal-pass-req').textContent='Deja en blanco para no cambiar.';
   document.getElementById('umodal-err').textContent='';
   document.getElementById('umodal-bg').style.display='flex';
@@ -400,6 +402,7 @@ async function saveUserModal() {
   var username = document.getElementById('umodal-username').value.trim().toLowerCase();
   var pass     = document.getElementById('umodal-password').value;
   var rol      = document.getElementById('umodal-rol').value;
+  var zona     = document.getElementById('umodal-zona').value || undefined;
   var errEl    = document.getElementById('umodal-err');
   var btn      = document.getElementById('umodal-save-btn');
 
@@ -416,7 +419,9 @@ async function saveUserModal() {
   if(authEditingId) {
     users = users.map(function(u){
       if(u.id!==authEditingId) return u;
-      return {id:u.id, nombre:nombre, username:username, password:pass.length>=6?pass:u.password, rol:rol};
+      var updated = {id:u.id, nombre:nombre, username:username, password:pass.length>=6?pass:u.password, rol:rol};
+      if(zona) updated.zona = zona; // solo guardar zona si tiene valor
+      return updated;
     });
     if(currentUser&&currentUser.id===authEditingId){
       currentUser=users.find(function(u){return u.id===authEditingId;});
@@ -424,7 +429,9 @@ async function saveUserModal() {
       updateTopbarUser();
     }
   } else {
-    users.push({id:Date.now(), nombre:nombre, username:username, password:pass, rol:rol});
+    var nuevo = {id:Date.now(), nombre:nombre, username:username, password:pass, rol:rol};
+    if(zona) nuevo.zona = zona;
+    users.push(nuevo);
   }
 
   var ok = await jsonbinSet(users);
@@ -573,6 +580,15 @@ function injectUserPanel() {
           '<option value="Técnico">Técnico</option>'+
           '<option value="Admin">Admin</option>'+
         '</select>'+
+      '</div>'+
+      '<div class="um-row"><label>Zona</label>'+
+        '<select id="umodal-zona">'+
+          '<option value="">— Sin zona (Admin Global) —</option>'+
+          '<option value="central">Central</option>'+
+          '<option value="oriental">Oriental</option>'+
+          '<option value="occidental">Occidental</option>'+
+        '</select>'+
+        '<div style="font-size:11px;color:#9ca3af;margin-top:3px">Sin zona = Admin Global (ve dashboard de las 3 zonas)</div>'+
       '</div>'+
       '<div id="umodal-err"></div>'+
       '<div class="um-actions">'+
