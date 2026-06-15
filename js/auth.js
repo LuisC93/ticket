@@ -12,9 +12,10 @@ var AUTH_SESSION_KEY = 'mce_session';
 var AUTH_CACHE_KEY   = 'mce_users_cache';
 
 var AUTH_PERMS = {
-  'Admin':           { crear:true,  cerrar:true,  editar:true,  verTodos:true,  usuarios:true,  config:true  },
-  'Monitor/Técnico': { crear:true,  cerrar:true,  editar:false, verTodos:false, usuarios:false, config:false },
-  'Técnico':         { crear:false, cerrar:true,  editar:false, verTodos:true,  usuarios:false, config:false }
+  'Admin':           { crear:true,  cerrar:true,  editar:true,  verTodos:true,  usuarios:true,  config:true,  supervisor:false },
+  'Supervisor':      { crear:false, cerrar:false, editar:false, verTodos:true,  usuarios:false, config:false, supervisor:true  },
+  'Monitor/Técnico': { crear:true,  cerrar:true,  editar:false, verTodos:false, usuarios:false, config:false, supervisor:false },
+  'Técnico':         { crear:false, cerrar:true,  editar:false, verTodos:true,  usuarios:false, config:false, supervisor:false }
 };
 
 // Migración: usuarios con el rol antiguo "Monitor" pasan a "Monitor/Técnico".
@@ -169,8 +170,10 @@ function showMainApp() {
   applyRoleUI();
   updateTopbarUser();
 
-  // Admin sin zona = Admin Global → mostrar dashboard global
+  // Admin sin zona = Admin Global → dashboard global de las 3 zonas
   var esAdminGlobal = currentUser && currentUser.rol === 'Admin' && !currentUser.zona;
+  // Supervisor → dashboard de su zona
+  var esSupervisor = currentUser && currentUser.rol === 'Supervisor';
   if (esAdminGlobal) {
     var btnGlobal = document.getElementById('sidebar-global');
     if (btnGlobal) {
@@ -178,6 +181,13 @@ function showMainApp() {
       setTimeout(function(){ switchTab('global', btnGlobal); }, 100);
     }
     if (typeof initDashboardGlobal === 'function') initDashboardGlobal();
+  } else if (esSupervisor) {
+    var btnSupervisor = document.getElementById('sidebar-supervisor');
+    if (btnSupervisor) {
+      btnSupervisor.style.display = 'flex';
+      setTimeout(function(){ switchTab('supervisor', btnSupervisor); }, 100);
+    }
+    if (typeof initDashboardSupervisor === 'function') initDashboardSupervisor();
   } else {
     setTimeout(function(){
       if (typeof preloadAtLogin === 'function') preloadAtLogin();
@@ -196,18 +206,23 @@ function showMainApp() {
 // ── PERMISOS EN UI ──
 function applyRoleUI() {
   if (!currentUser) return;
-  var perms = AUTH_PERMS[currentUser.rol];
+  var perms = AUTH_PERMS[currentUser.rol] || AUTH_PERMS['Monitor/Técnico'];
   var esAdminGlobal = currentUser.rol === 'Admin' && !currentUser.zona;
-  var btnNuevo   = document.querySelector('.sidebar-item[onclick*="nuevo"]');
-  var btnTecnico = document.querySelector('.sidebar-item[onclick*="tecnico"]');
-  var btnGlobal  = document.getElementById('sidebar-global');
-  if (btnNuevo)   btnNuevo.style.display   = perms.crear ? 'flex' : 'none';
-  if (btnTecnico) btnTecnico.style.display = (perms.cerrar||perms.verTodos) ? 'flex' : 'none';
-  if (btnGlobal)  btnGlobal.style.display  = esAdminGlobal ? 'flex' : 'none';
+  var esSupervisor  = currentUser.rol === 'Supervisor';
+  var btnNuevo      = document.querySelector('.sidebar-item[onclick*="nuevo"]');
+  var btnTecnico    = document.querySelector('.sidebar-item[onclick*="tecnico"]');
+  var btnMonitoreo  = document.querySelector('.sidebar-item[onclick*="monitoreo"]');
+  var btnGlobal     = document.getElementById('sidebar-global');
+  var btnSupervisor = document.getElementById('sidebar-supervisor');
+  if (btnNuevo)      btnNuevo.style.display      = perms.crear ? 'flex' : 'none';
+  if (btnTecnico)    btnTecnico.style.display    = (perms.cerrar||perms.verTodos) && !esSupervisor ? 'flex' : 'none';
+  if (btnMonitoreo)  btnMonitoreo.style.display  = !esSupervisor ? 'flex' : 'none';
+  if (btnGlobal)     btnGlobal.style.display     = esAdminGlobal ? 'flex' : 'none';
+  if (btnSupervisor) btnSupervisor.style.display = esSupervisor ? 'flex' : 'none';
   var btnCfg = document.querySelector('.btn-report');
   if (btnCfg) btnCfg.style.display = perms.config ? 'flex' : 'none';
-  // Admin con zona o no-Admin → ir a su panel normal
-  if (!perms.crear && !esAdminGlobal) {
+  // Si no puede crear y no es dashboard especial → ir al panel de tickets/monitoreo
+  if (!perms.crear && !esAdminGlobal && !esSupervisor) {
     var btnMon = document.querySelector('.sidebar-item[onclick*="monitor"]');
     if (btnMon) btnMon.click();
   }
@@ -301,6 +316,7 @@ function toggleUserMenu() {
 function roleStyle(rol) {
   var map={
     'Admin':           {bg:'#eff6ff',color:'#2563eb',av:'#2563eb'},
+    'Supervisor':      {bg:'#f0fdf4',color:'#16a34a',av:'#16a34a'},
     'Monitor/Técnico': {bg:'#f5f3ff',color:'#7c3aed',av:'#7c3aed'},
     'Técnico':         {bg:'#fffbeb',color:'#d97706',av:'#d97706'}
   };
@@ -578,6 +594,7 @@ function injectUserPanel() {
         '<select id="umodal-rol">'+
           '<option value="Monitor/Técnico">Monitor/Técnico</option>'+
           '<option value="Técnico">Técnico</option>'+
+          '<option value="Supervisor">Supervisor</option>'+
           '<option value="Admin">Admin</option>'+
         '</select>'+
       '</div>'+
