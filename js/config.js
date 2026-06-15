@@ -1,21 +1,33 @@
 // config.js — Estado global, configuración y mapa de bloques
 
-// Usuario activo. Se declara aquí (primer script en cargar) para que cualquier
-// render inicial pueda leerlo sin error. auth.js lo asigna tras el login.
 var currentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
 
+// ── ZONAS ──
+var ZONAS = {
+  central: {
+    nombre: 'Central',
+    url: 'https://script.google.com/macros/s/AKfycbxdjgnYyxWz0pr7W6SdkTMbyebpyYQRWjdPFthH2vC27YEDn4ZnxU5AcL59cq35B2ya/exec'
+  },
+  oriental: {
+    nombre: 'Oriental',
+    url: 'https://script.google.com/macros/s/AKfycbxsCyQuxuN55ieQP7poT9zhsy4gPiAWybr7Xhcqlh4fVW1Dcair9dvRy_VhVuYslgI/exec'
+  },
+  occidental: {
+    nombre: 'Occidental',
+    url: 'https://script.google.com/macros/s/AKfycbxGlxrSRvbOr-LRdH6Skz08haSW4OwtQLYovD-T5f5IYSUnOzpFvLOqmpG6Nk58W-sNlA/exec'
+  }
+};
+var ZONA_DEFAULT = 'central';
+
 // ── URL DEL SCRIPT ──
-// Valor por defecto. Si el admin pega otra URL en "Configurar", esa MANDA
-// (útil cuando el script se mueve de cuenta y cambia la URL /exec).
 var CFG_DEFAULT = {
-  url:   'https://script.google.com/macros/s/AKfycbyk8OQcqPNHFZedJywg-bq-hjym0ziYck95SiV2ZFC41c9CedmlIkbMVAjJTphi5LYj/exec',
+  url:   ZONAS.central.url,
   sheet: 'SLA'
 };
 var CFG_SAVED = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
-// Si en el navegador quedó guardada una URL VIEJA de un despliegue anterior,
-// la descartamos para usar la nueva del código. (Lista de URLs obsoletas.)
 var URLS_OBSOLETAS = [
-  'AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91'
+  'AKfycbw9_MGNNS3DEoJGOHb9VclI3LY-ARwILy3GG8ohTGHfFPQ_6IqM8T8imys89w47VY91',
+  'AKfycbyk8OQcqPNHFZedJywg-bq-hjym0ziYck95SiV2ZFC41c9CedmlIkbMVAjJTphi5LYj'
 ];
 if (CFG_SAVED.url && URLS_OBSOLETAS.some(function(u){ return CFG_SAVED.url.indexOf(u) > -1; })) {
   delete CFG_SAVED.url;
@@ -25,52 +37,88 @@ if (CFG_SAVED.url && URLS_OBSOLETAS.some(function(u){ return CFG_SAVED.url.index
     localStorage.setItem('inc_cfg', JSON.stringify(_tmp));
   } catch (e) {}
 }
-// Usa lo guardado si existe; si no, el valor por defecto del código.
 var CFG = Object.assign({}, CFG_DEFAULT, CFG_SAVED);
 if (!CFG.url) CFG.url = CFG_DEFAULT.url;
+
+// Zona activa (se establece al hacer login según el campo 'zona' del usuario).
+var zonaActiva = localStorage.getItem('inc_zona') || ZONA_DEFAULT;
+
+// Aplicar la URL de la zona activa.
+function aplicarZona(zona) {
+  if (!ZONAS[zona]) zona = ZONA_DEFAULT;
+  zonaActiva = zona;
+  localStorage.setItem('inc_zona', zona);
+  var savedManual = JSON.parse(localStorage.getItem('inc_cfg') || '{}');
+  if (!savedManual.url) {
+    CFG.url = ZONAS[zona].url;
+  }
+}
+
+// Aplicar la zona guardada al cargar
+aplicarZona(zonaActiva);
+
 var tickets = JSON.parse(localStorage.getItem('inc_data') || '[]');
 var activeFilter = 'all', monFilter = 'all', dayFilter = 'today', tecDayFilter = 'today';
-var ticketMonitorFilter = ''; // filtro de tickets por monitor (solo Admin/Técnico; '' = todos)
+var ticketMonitorFilter = '';
 var activeIdx = null;
 
-// ── MAPA BLOQUES (código → bloque) ──
+// ── MAPA BLOQUES ──
 var bloquesMap = JSON.parse(localStorage.getItem('inc_bloques') || '{}');
 
-// ── LISTA CENTRAL DE MONITORES (una sola fuente de verdad) ──
-// Se usa para: formulario nuevo, modal editar, monitor del día y reasignación masiva.
-var MONITORS = ['Jose Luis','Boris','Jimmy','Marta','Luis Yanes','Sandor','Jose Cruz','Jonatan','Linda'];
-
-// ── MAPA MONITOR → PESTAÑA DE DRIVE ──
-// La hoja (pestaña) de cada monitor en el Google Sheet de monitoreo.
-// Por defecto es el mismo nombre; aquí se corrigen los que difieren.
-// ⚠️ EDITA AQUÍ si alguna pestaña se llama distinto al nombre del monitor.
-var MONITOR_SHEET_MAP = {
-  'Jose Luis':  'Jose Luis',
-  'Boris':      'Boris',
-  'Jimmy':      'Jimy',          // la pestaña se llama "Jimy"
-  'Marta':      'Marta',
-  'Luis Yanes': 'Luis Yanes',
-  'Sandor':     'Sandor',
-  'Jose Cruz':  'Jose Cruz',
-  'Jose':       'Jose Cruz',     // alias: usuario "Jose" → pestaña "Jose Cruz"
-  'Jonatan':    'Jonatan',
-  'Linda':      'Linda Aviles'   // la pestaña se llama "Linda Aviles"
+// ── MONITORES POR ZONA ──
+// Cada zona tiene su propia lista de monitores y mapa de pestañas.
+var MONITORS_POR_ZONA = {
+  central: ['Jose Luis', 'Ericka Chacon', 'William Molina', 'Barbara Magaña', 'Alejandra franco'],
+  oriental: ['Boris Garcia', 'Luis Yanes', 'Jimmy Francisco'],
+  occidental: ['Jonatan Aparicio', 'Linda Aviles', 'Michael', 'Jose Antonio', 'Sandor Hernandez']
 };
+
+// Lista activa según zona (se actualiza al cambiar de zona)
+var MONITORS = MONITORS_POR_ZONA[zonaActiva] || MONITORS_POR_ZONA.central;
+
+// Mapa monitor → pestaña del Sheet por zona
+var MONITOR_SHEET_MAP_POR_ZONA = {
+  central: {
+    'Jose Luis':      'Jose Luis',
+    'Ericka Chacon':  'Ericka Chacon',
+    'William Molina': 'William Molina',
+    'Barbara Magaña': 'Barbara Magaña',
+    'Alejandra franco': 'Alejandra franco'
+  },
+  oriental: {
+    'Boris Garcia':    'Boris Garcia',
+    'Luis Yanes':      'Luis Yanes',
+    'Jimmy Francisco': 'Jimmy Francisco'
+  },
+  occidental: {
+    'Jonatan Aparicio':  'Jonatan Aparicio',
+    'Linda Aviles':      'Linda Aviles',
+    'Michael':           'Michael',
+    'Jose Antonio':      'Jose Antonio',
+    'Sandor Hernandez':  'Sandor Hernandez'
+  }
+};
+
+var MONITOR_SHEET_MAP = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP_POR_ZONA.central;
+
 function getSheetForMonitor(nombre) {
-  if (MONITOR_SHEET_MAP[nombre]) return MONITOR_SHEET_MAP[nombre];
-  // Búsqueda tolerante: ignora mayúsculas y tildes ("jonatan" → "Jonatan")
+  var mapa = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP;
+  if (mapa[nombre]) return mapa[nombre];
   var norm = function(s){ return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); };
   var n = norm(nombre);
-  for (var k in MONITOR_SHEET_MAP) {
-    if (norm(k) === n) return MONITOR_SHEET_MAP[k];
+  for (var k in mapa) {
+    if (norm(k) === n) return mapa[k];
   }
-  // Si no está en el mapa, capitaliza la primera letra de cada palabra como respaldo
   return String(nombre || '').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
 }
 
-// ── ESTADOS DE MONITOREO (desplegable con colores) ──
-// label = texto exacto que se escribe en la hoja. bg/fg = color de la "celda".
-// ⚠️ EDITA AQUÍ para agregar, quitar o renombrar estados.
+// Actualizar MONITORS y MONITOR_SHEET_MAP cuando cambie la zona
+function _actualizarDatosZona() {
+  MONITORS = MONITORS_POR_ZONA[zonaActiva] || MONITORS_POR_ZONA.central;
+  MONITOR_SHEET_MAP = MONITOR_SHEET_MAP_POR_ZONA[zonaActiva] || MONITOR_SHEET_MAP_POR_ZONA.central;
+}
+
+// ── ESTADOS DE MONITOREO ──
 var ESTADOS_MONITOREO = [
   { label: 'Navegación estable',            bg:'#34a853', fg:'#ffffff' },
   { label: 'Corte F.O externa',             bg:'#ea4335', fg:'#ffffff' },
@@ -98,20 +146,16 @@ function estadoMonitoreoColor(label) {
   return { label: label||'', bg:'#ffffff', fg:'#9ca3af' };
 }
 
-// ── DATOS DE MONITOREO (cache local por monitor) ──
-// { monitorApp: nombre, sheet: pestaña, dateCol: 'd/m', rows: [...] }
+// ── DATOS DE MONITOREO ──
 var monitoreoData = JSON.parse(localStorage.getItem('inc_monitoreo') || 'null');
 function saveMonitoreoLocal() { localStorage.setItem('inc_monitoreo', JSON.stringify(monitoreoData)); }
 
 // ── MONITOR DEL DÍA ──
-// Se guarda por día. Si cambia el turno durante el día, se actualiza y los
-// tickets nuevos se autocompletan con el nuevo monitor.
 function getMonitorDia() {
   try {
     var raw = JSON.parse(localStorage.getItem('inc_monitor_dia') || 'null');
     if (raw && raw.fecha === todayISO() && raw.nombre) return raw.nombre;
   } catch (e) {}
-  // Default del día: si el usuario es Monitor/Técnico, su propio nombre.
   if (typeof currentUser !== 'undefined' && currentUser && currentUser.rol === 'Monitor/Técnico') {
     return currentUser.nombre || '';
   }
@@ -121,7 +165,7 @@ function setMonitorDia(nombre) {
   localStorage.setItem('inc_monitor_dia', JSON.stringify({ fecha: todayISO(), nombre: nombre || '' }));
 }
 
-// ── HELPER: llenar un <select> desde un arreglo ──
+// ── HELPER: llenar <select> ──
 function fillSelect(id, items, opts) {
   opts = opts || {};
   var el = document.getElementById(id);
@@ -129,7 +173,6 @@ function fillSelect(id, items, opts) {
   var current = el.value;
   var html = '';
   if (opts.placeholder) html += '<option value="">' + opts.placeholder + '</option>';
-  // Asegura que el valor preseleccionado exista aunque no esté en la lista
   var list = items.slice();
   if (opts.preselect && list.indexOf(opts.preselect) === -1) list.unshift(opts.preselect);
   html += list.map(function(v){ return '<option>' + v + '</option>'; }).join('');
@@ -159,21 +202,17 @@ function getBloqueFromCod(cod) {
   return bloquesMap[cod] || '';
 }
 
-// ── CARGA BLOQUES DESDE SHEETS ──
+// ── CARGA BLOQUES ──
 async function cargarBloques() {
   if (!CFG.url) return;
   try {
-    var q = 'action=getBloques';
-    var r = await fetch(CFG.url + '?' + q);
+    var r = await fetch(CFG.url + '?action=getBloques');
     var d = await r.json();
     if (d && d.status === 'ok' && d.map) {
       bloquesMap = d.map;
       localStorage.setItem('inc_bloques', JSON.stringify(bloquesMap));
-      console.log('Bloques cargados: ' + Object.keys(bloquesMap).length);
     }
-  } catch (e) {
-    console.warn('No se pudieron cargar los bloques:', e);
-  }
+  } catch (e) { console.warn('No se pudieron cargar los bloques:', e); }
 }
 
 // ── CONFIG ──
@@ -183,7 +222,7 @@ function saveConfig() {
   localStorage.setItem('inc_cfg', JSON.stringify(CFG));
   setSyncStatus('ok');
   showAlert('alert-ok', 'alert-err', 'Configuración guardada ✓');
-  cargarBloques(); // carga bloques al guardar config
+  cargarBloques();
 }
 function loadConfig() {
   var urlEl = document.getElementById('cfg-url');
